@@ -1,0 +1,19 @@
+# Firebase App Hosting — https://firebase.google.com/docs/app-hosting/configure
+runConfig:
+  minInstances: 0
+  maxInstances: 2
+  cpu: 1
+  memoryMiB: 1024
+
+# Keep the Next.js adapter for build; only customize how the container starts.
+scripts:
+  runCommand: npx prisma db push && npx prisma db seed && npm run start
+
+env:
+  # SQLite is fine for a first cloud smoke test; the file resets when Cloud Run
+  # recycles the instance. Use hosted Postgres (Neon/Cloud SQL) before a real event.
+  - variable: DATABASE_URL
+    value: file:./prisma/deploy.db
+    availability:
+      - BUILD
+      - RUNTIME
