@@ -1,17 +1,10 @@
 import Alert from "@mui/material/Alert";
 import { Suspense } from "react";
 import { AppShell } from "@/components/AppShell";
-import { LiveSync } from "@/components/LiveSync";
 import { ScopePicker } from "@/components/ScopePicker";
 import { requireRole } from "@/lib/auth";
-import {
-  buildScrutineerView,
-  listCompetitions,
-  loadAuditsForDivision,
-  loadCompetition,
-  pickDivision,
-  pickSession,
-} from "@/lib/results";
+import { loadScrutineerView } from "@/lib/results";
+import { listCompetitions, listDivisions, listSessions } from "@/lib/store/competitions";
 import { ScrutineerBoard } from "./ScrutineerBoard";
 
 type Props = {
@@ -30,20 +23,24 @@ export default async function ScrutineerPage({ searchParams }: Props) {
 
   const competition = inactiveRequested
     ? null
-    : await loadCompetition(
-        requested?.active ? requested.id : activeCompetitions[0]?.id,
-        { activeOnly: true },
-      );
+    : requested?.active
+      ? requested
+      : activeCompetitions[0] ?? null;
 
-  const session = competition ? pickSession(competition, params.sessionId) : null;
-  const division = competition ? pickDivision(competition, params.divisionId) : null;
-  let view =
+  const sessions = competition ? await listSessions(competition.id) : [];
+  const divisions = competition ? await listDivisions(competition.id) : [];
+  const session = sessions.find((item) => item.id === params.sessionId) ?? sessions[0] ?? null;
+  const division =
+    divisions.find((item) => item.id === params.divisionId) ?? divisions[0] ?? null;
+
+  const view =
     competition && session && division
-      ? buildScrutineerView(competition, { sessionId: session.id, divisionId: division.id })
+      ? await loadScrutineerView({
+          competitionId: competition.id,
+          sessionId: session.id,
+          divisionId: division.id,
+        })
       : null;
-  if (view) {
-    view = { ...view, audits: await loadAuditsForDivision(view.competitionId, view.divisionId) };
-  }
 
   return (
     <AppShell
@@ -71,7 +68,6 @@ export default async function ScrutineerPage({ searchParams }: Props) {
           : []
       }
     >
-      <LiveSync />
       {competition && activeCompetitions.length > 0 ? (
         <Suspense fallback={null}>
           <ScopePicker
@@ -79,8 +75,8 @@ export default async function ScrutineerPage({ searchParams }: Props) {
               id: item.id,
               label: item.name,
             }))}
-            sessions={competition.sessions.map((item) => ({ id: item.id, label: item.name }))}
-            divisions={competition.divisions.map((item) => ({
+            sessions={sessions.map((item) => ({ id: item.id, label: item.name }))}
+            divisions={divisions.map((item) => ({
               id: item.id,
               label: `${item.name} (${item.scale})`,
             }))}
@@ -99,7 +95,7 @@ export default async function ScrutineerPage({ searchParams }: Props) {
       ) : activeCompetitions.length === 0 ? (
         <Alert severity="warning">No active competitions. An admin must mark a competition active.</Alert>
       ) : !view ? (
-        <Alert severity="warning">No competition is loaded.</Alert>
+        <Alert severity="warning">No competition is loaded. Run the Firestore seed.</Alert>
       ) : (
         <ScrutineerBoard
           key={`${view.competitionId}-${view.sessionId}-${view.divisionId}`}

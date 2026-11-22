@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { exportDivision } from "@/lib/cdd/adapter";
-import { buildScrutineerView, loadCompetition } from "@/lib/results";
+import { loadScrutineerView } from "@/lib/results";
 
 export async function GET(request: Request) {
   const session = await getSession();
@@ -13,10 +12,11 @@ export async function GET(request: Request) {
   const competitionId = url.searchParams.get("competitionId");
   const sessionId = url.searchParams.get("sessionId");
   const divisionId = url.searchParams.get("divisionId");
+  if (!competitionId || !sessionId || !divisionId) {
+    return NextResponse.json({ error: "Missing scope" }, { status: 400 });
+  }
 
-  const competition = await loadCompetition(competitionId);
-  if (!competition) return NextResponse.json({ error: "No competition" }, { status: 404 });
-  const view = buildScrutineerView(competition, { sessionId, divisionId });
+  const view = await loadScrutineerView({ competitionId, sessionId, divisionId });
   if (!view) return NextResponse.json({ error: "No session" }, { status: 404 });
-  return NextResponse.json(exportDivision(view.packet));
+  return NextResponse.json(view.packet);
 }

@@ -1,49 +1,47 @@
-import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/db";
-import { publishLive } from "@/lib/live";
+import { getSession, type Role } from "@/lib/auth";
+import { createUser, listUsers } from "@/lib/store/users";
 
-async function requireAdmin() {
+export async function GET() {
   const session = await getSession();
-  if (!session || session.role !== "ADMIN") return null;
-  return session;
+  if (!session || session.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return NextResponse.json({ users: await listUsers() });
 }
 
 export async function POST(request: Request) {
-  const session = await requireAdmin();
-  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const session = await getSession();
+  if (!session || session.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const body = (await request.json()) as {
     username?: string;
     displayName?: string;
+    role?: Role;
     password?: string;
-    role?: string;
   };
-  const username = body.username?.trim() ?? "";
-  const displayName = body.displayName?.trim() ?? "";
-  const password = body.password ?? "";
-  const role = body.role ?? "JUDGE";
-  if (!username || !displayName || !password || !["ADMIN", "JUDGE", "SCRUTINEER"].includes(role)) {
-    return NextResponse.json(
-      { error: "Username, display name, password, and role are required." },
-      { status: 400 },
-    );
+
+  if (!body.username || !body.displayName || !body.role || !body.password) {
+    return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+  }
+  if (!["ADMIN", "JUDGE", "SCRUTINEER"].includes(body.role)) {
+    return NextResponse.json({ error: "Invalid role" }, { status: 400 });
   }
 
   try {
-    await prisma.user.create({
-      data: {
-        username,
-        displayName,
-        role,
-        passwordHash: bcrypt.hashSync(password, 10),
-      },
+    const user = await createUser({
+      username: body.username,
+      displayName: body.displayName,
+      role: body.role,
+      password: body.password,
     });
-  } catch {
-    return NextResponse.json({ error: "Username already exists" }, { status: 409 });
+    return NextResponse.json({ ok: true, user });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Could not create user" },
+      { status: 400 },
+    );
   }
-
-  publishLive({ type: "users" });
-  return NextResponse.json({ ok: true });
 }

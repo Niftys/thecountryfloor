@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { buildScrutineerView, loadAuditsForDivision, loadCompetition } from "@/lib/results";
+import { loadScrutineerView } from "@/lib/results";
 
 export async function GET(request: Request) {
   const session = await getSession();
@@ -8,18 +8,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const url = new URL(request.url);
-  const competitionId = url.searchParams.get("competitionId");
-  const sessionId = url.searchParams.get("sessionId");
-  const divisionId = url.searchParams.get("divisionId");
+  const { searchParams } = new URL(request.url);
+  const competitionId = searchParams.get("competitionId");
+  const sessionId = searchParams.get("sessionId");
+  const divisionId = searchParams.get("divisionId");
+  const force = searchParams.get("rebuild") === "1";
 
-  const competition = await loadCompetition(competitionId);
-  if (!competition) return NextResponse.json({ error: "No competition" }, { status: 404 });
-  if (!competition.active) {
-    return NextResponse.json({ error: "This competition is inactive." }, { status: 403 });
+  if (!competitionId || !sessionId || !divisionId) {
+    return NextResponse.json({ error: "Missing scope" }, { status: 400 });
   }
-  const view = buildScrutineerView(competition, { sessionId, divisionId });
-  if (!view) return NextResponse.json({ error: "No session" }, { status: 404 });
-  const audits = await loadAuditsForDivision(view.competitionId, view.divisionId);
-  return NextResponse.json({ ...view, audits });
+
+  const view = await loadScrutineerView({
+    competitionId,
+    sessionId,
+    divisionId,
+    forceRebuild: force,
+  });
+  if (!view) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  return NextResponse.json(view);
 }

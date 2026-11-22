@@ -43,8 +43,8 @@ export type DivisionPacket = {
   }[];
 };
 
-export function exportDivision(packet: Omit<DivisionPacket, "format"> & { format?: string }): DivisionPacket {
-  return { format: "countryfloor.results.v1", ...packet };
+export function exportDivision(packet: Omit<DivisionPacket, "format">): DivisionPacket {
+  return { ...packet, format: "countryfloor.results.v1" };
 }
 
 export function danceRowFromBreakdown(

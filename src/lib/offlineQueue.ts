@@ -4,6 +4,8 @@ export type QueuedHeatSubmit = {
   id: string;
   createdAt: string;
   payload: {
+    competitionId: string;
+    sessionId: string;
     heatId: string;
     confirm: boolean;
     asJudgeId?: string;

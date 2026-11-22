@@ -8,8 +8,10 @@ import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { signInWithCustomToken } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { getClientAuth } from "@/lib/firebase/client";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -27,11 +29,23 @@ export default function LoginPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
     });
-    setBusy(false);
+    const body = (await response.json().catch(() => null)) as {
+      customToken?: string;
+      error?: string;
+    } | null;
     if (!response.ok) {
+      setBusy(false);
       setError("Username or password is wrong.");
       return;
     }
+    try {
+      if (body?.customToken) {
+        await signInWithCustomToken(getClientAuth(), body.customToken);
+      }
+    } catch {
+      // Session cookie still works for SSR; live listeners may need emulator/auth.
+    }
+    setBusy(false);
     router.push("/");
     router.refresh();
   }

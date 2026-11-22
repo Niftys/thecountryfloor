@@ -1,248 +1,169 @@
-import { prisma } from "../db";
-import { publishLive } from "../live";
-import { parseCddPayload } from "./adapter";
-import type { CddCompetitionPayload } from "./types";
+import { adminDb } from "@/lib/firebase/admin";
+import { parseCddPayload } from "@/lib/cdd/adapter";
+import type { CddCompetitionPayload } from "@/lib/cdd/types";
+import { DANCE_STYLES } from "@/lib/dances";
+import { rebuildSessionLive } from "@/lib/store/competitions";
+import { competitionRef, divisionPath, heatPath, sessionPath } from "@/lib/store/paths";
+import { findUserByUsername } from "@/lib/store/users";
+import type {
+  CompetitionDoc,
+  DivisionDoc,
+  HeatDoc,
+  HeatEntryEmbedded,
+  SessionDoc,
+} from "@/lib/store/types";
+import type { Scale } from "@/lib/scoring";
 
-function jsonBag(value: Record<string, unknown> | undefined) {
-  return value ? JSON.stringify(value) : null;
+function styleName(abbrev: string) {
+  return DANCE_STYLES.find((item) => item.abbrev === abbrev)?.name ?? abbrev;
 }
 
 /**
  * Import structure from CDD exchange JSON.
- * Never deletes or overwrites existing Score / HeatSubmission rows.
+ * Never deletes or overwrites existing judgeSheets.
  */
 export async function importCddCompetition(raw: unknown) {
   const parsed = parseCddPayload(raw);
   if (!parsed.ok) return parsed;
 
   const data: CddCompetitionPayload = parsed.data;
-  const existing =
-    (data.competition.cddId
-      ? await prisma.competition.findFirst({ where: { cddId: data.competition.cddId } })
-      : null) ??
-    (await prisma.competition.findFirst({ where: { name: data.competition.name } }));
+  const existingSnap = data.competition.cddId
+    ? await adminDb
+        .collection("competitions")
+        .where("cddId", "==", data.competition.cddId)
+        .limit(1)
+        .get()
+    : await adminDb
+        .collection("competitions")
+        .where("name", "==", data.competition.name)
+        .limit(1)
+        .get();
 
-  const competition = existing
-    ? await prisma.competition.update({
-        where: { id: existing.id },
-        data: {
-          name: data.competition.name,
-          dateLabel: data.competition.dateLabel ?? existing.dateLabel,
-          location: data.competition.location ?? existing.location,
-          status: data.competition.status ?? existing.status,
-          active: data.competition.active ?? existing.active,
-          cddId: data.competition.cddId ?? existing.cddId,
-          cddData: jsonBag(data.competition.cddData) ?? existing.cddData,
-        },
-      })
-    : await prisma.competition.create({
-        data: {
-          name: data.competition.name,
-          dateLabel: data.competition.dateLabel ?? "",
-          location: data.competition.location ?? "",
-          status: data.competition.status ?? "Imported",
-          active: data.competition.active ?? false,
-          cddId: data.competition.cddId,
-          cddData: jsonBag(data.competition.cddData),
-        },
-      });
+  const competitionId = existingSnap.empty ? adminDb.collection("competitions").doc().id : existingSnap.docs[0]!.id;
+  const competition: CompetitionDoc = {
+    name: data.competition.name,
+    dateLabel: data.competition.dateLabel ?? "",
+    location: data.competition.location ?? "",
+    status: data.competition.status ?? "Imported",
+    active: data.competition.active ?? false,
+    cddId: data.competition.cddId ?? null,
+    cddData: data.competition.cddData ?? null,
+  };
+  await adminDb.doc(competitionRef(competitionId)).set(competition, { merge: true });
 
   const divisionIds = new Map<string, string>();
   const danceIds = new Map<string, string>();
   const competitorIds = new Map<string, string>();
+  const divisionDocs = new Map<string, DivisionDoc & { id: string }>();
 
   for (const div of data.divisions) {
-    let division = await prisma.division.findFirst({
-      where: {
-        competitionId: competition.id,
-        OR: [
-          ...(div.cddId ? [{ cddId: div.cddId }] : []),
-          { name: div.name },
-        ],
-      },
+    const divisionId = adminDb.collection("x").doc().id;
+    const dances = div.dances.map((dance, index) => {
+      const id = `${divisionId}_d_${dance.abbrev}`;
+      danceIds.set(`${div.name}:${dance.abbrev}`, id);
+      return {
+        id,
+        name: dance.name,
+        abbrev: dance.abbrev,
+        sortOrder: dance.sortOrder ?? index + 1,
+      };
     });
-    if (division) {
-      division = await prisma.division.update({
-        where: { id: division.id },
-        data: {
-          name: div.name,
-          scale: div.scale,
-          rule9Count: div.rule9Count,
-          cddId: div.cddId ?? division.cddId,
-          cddData: jsonBag(div.cddData) ?? division.cddData,
-        },
-      });
-    } else {
-      division = await prisma.division.create({
-        data: {
-          competitionId: competition.id,
-          name: div.name,
-          scale: div.scale,
-          rule9Count: div.rule9Count,
-          cddId: div.cddId,
-          cddData: jsonBag(div.cddData),
-        },
-      });
-    }
-    divisionIds.set(div.name, division.id);
-
-    for (const dance of div.dances) {
-      let row = await prisma.dance.findFirst({
-        where: { divisionId: division.id, abbrev: dance.abbrev },
-      });
-      if (row) {
-        row = await prisma.dance.update({
-          where: { id: row.id },
-          data: { name: dance.name, sortOrder: dance.sortOrder },
-        });
-      } else {
-        row = await prisma.dance.create({
-          data: {
-            divisionId: division.id,
-            name: dance.name,
-            abbrev: dance.abbrev,
-            sortOrder: dance.sortOrder,
-          },
-        });
-      }
-      danceIds.set(`${div.name}:${dance.abbrev}`, row.id);
-    }
-
-    for (const couple of div.competitors) {
-      let row = await prisma.competitor.findFirst({
-        where: {
-          divisionId: division.id,
-          OR: [
-            ...(couple.cddId ? [{ cddId: couple.cddId }] : []),
-            { bib: couple.bib },
-          ],
-        },
-      });
-      if (row) {
-        row = await prisma.competitor.update({
-          where: { id: row.id },
-          data: {
-            bib: couple.bib,
-            name: couple.name,
-            cddId: couple.cddId ?? row.cddId,
-            cddData: jsonBag(couple.cddData) ?? row.cddData,
-          },
-        });
-      } else {
-        row = await prisma.competitor.create({
-          data: {
-            divisionId: division.id,
-            bib: couple.bib,
-            name: couple.name,
-            cddId: couple.cddId,
-            cddData: jsonBag(couple.cddData),
-          },
-        });
-      }
-      competitorIds.set(`${div.name}:${couple.bib}`, row.id);
-    }
+    const competitors = div.competitors.map((couple) => {
+      const id = couple.cddId ?? `${divisionId}_c_${couple.bib}`;
+      competitorIds.set(`${div.name}:${couple.bib}`, id);
+      return {
+        id,
+        bib: couple.bib,
+        name: couple.name,
+        cddId: couple.cddId ?? null,
+        cddData: couple.cddData ?? null,
+      };
+    });
+    const doc: DivisionDoc = {
+      name: div.name,
+      scale: div.scale as Scale,
+      rule9Count: div.rule9Count,
+      cddId: div.cddId ?? null,
+      cddData: div.cddData ?? null,
+      dances,
+      competitors,
+    };
+    await adminDb.doc(divisionPath(competitionId, divisionId)).set(doc);
+    divisionIds.set(div.name, divisionId);
+    divisionDocs.set(divisionId, { id: divisionId, ...doc });
   }
 
   for (const sess of data.sessions) {
-    let session = await prisma.session.findFirst({
-      where: {
-        competitionId: competition.id,
-        OR: [...(sess.cddId ? [{ cddId: sess.cddId }] : []), { name: sess.name }],
-      },
-    });
-    if (session) {
-      session = await prisma.session.update({
-        where: { id: session.id },
-        data: {
-          name: sess.name,
-          sortOrder: sess.sortOrder,
-          cddId: sess.cddId ?? session.cddId,
-          cddData: jsonBag(sess.cddData) ?? session.cddData,
-        },
-      });
-    } else {
-      session = await prisma.session.create({
-        data: {
-          competitionId: competition.id,
-          name: sess.name,
-          sortOrder: sess.sortOrder,
-          cddId: sess.cddId,
-          cddData: jsonBag(sess.cddData),
-        },
-      });
+    const sessionId = sess.cddId ?? adminDb.collection("x").doc().id;
+    const judgeIds: string[] = [];
+    for (const username of sess.judgeUsernames) {
+      const user = await findUserByUsername(username);
+      if (user) judgeIds.push(user.id);
     }
 
-    await prisma.sessionJudge.deleteMany({ where: { sessionId: session.id } });
-    let order = 0;
-    for (const username of sess.judgeUsernames ?? []) {
-      const user = await prisma.user.findUnique({ where: { username } });
-      if (!user) continue;
-      await prisma.sessionJudge.create({
-        data: { sessionId: session.id, userId: user.id, sortOrder: order++ },
-      });
-    }
-
-    for (const heatPlan of sess.heats ?? []) {
-      let heat = await prisma.heat.findFirst({
-        where: {
-          sessionId: session.id,
-          OR: [
-            ...(heatPlan.cddId ? [{ cddId: heatPlan.cddId }] : []),
-            { number: heatPlan.number },
-          ],
-        },
-      });
-      if (heat) {
-        heat = await prisma.heat.update({
-          where: { id: heat.id },
-          data: {
-            number: heatPlan.number,
-            cddId: heatPlan.cddId ?? heat.cddId,
-            cddData: jsonBag(heatPlan.cddData) ?? heat.cddData,
-          },
-        });
-      } else {
-        heat = await prisma.heat.create({
-          data: {
-            sessionId: session.id,
-            number: heatPlan.number,
-            cddId: heatPlan.cddId,
-            cddData: jsonBag(heatPlan.cddData),
-          },
-        });
-      }
-
-      const wanted = new Set<string>();
-      for (const entry of heatPlan.entries ?? []) {
+    const heatIndex: SessionDoc["heatIndex"] = [];
+    for (const heat of sess.heats) {
+      const heatId = heat.cddId ?? adminDb.collection("x").doc().id;
+      const entries: HeatEntryEmbedded[] = [];
+      for (const entry of heat.entries) {
+        const divisionId = divisionIds.get(entry.divisionName);
+        const division = divisionId ? divisionDocs.get(divisionId) : null;
+        if (!division || !divisionId) continue;
         const competitorId = competitorIds.get(`${entry.divisionName}:${entry.bib}`);
-        const danceId = danceIds.get(`${entry.divisionName}:${heatPlan.styleAbbrev}`);
-        if (!competitorId || !danceId) continue;
-        wanted.add(`${competitorId}:${danceId}`);
-        const existingEntry = await prisma.heatEntry.findFirst({
-          where: { heatId: heat.id, competitorId, danceId },
+        const competitor = division.competitors.find((item) => item.id === competitorId);
+        const dance = division.dances.find((item) => item.abbrev === heat.styleAbbrev);
+        if (!competitor || !dance) continue;
+        entries.push({
+          id: `${heatId}_${competitor.id}_${dance.id}`,
+          competitorId: competitor.id,
+          bib: competitor.bib,
+          name: competitor.name,
+          divisionId,
+          divisionName: division.name,
+          scale: division.scale,
+          danceId: dance.id,
+          danceName: dance.name,
+          danceAbbrev: dance.abbrev,
         });
-        if (!existingEntry) {
-          await prisma.heatEntry.create({
-            data: { heatId: heat.id, competitorId, danceId },
-          });
-        }
       }
-
-      // Remove entries that vanished from CDD only if they have no scores
-      const current = await prisma.heatEntry.findMany({
-        where: { heatId: heat.id },
-        include: { scores: true },
+      const heatDoc: HeatDoc = {
+        number: heat.number,
+        styleAbbrev: heat.styleAbbrev,
+        styleName: styleName(heat.styleAbbrev),
+        entries,
+        confirmedJudgeIds: [],
+        confirmCount: 0,
+        cddId: heat.cddId ?? null,
+        cddData: heat.cddData ?? null,
+      };
+      // Preserve existing confirmations if heat already exists
+      const existingHeat = await adminDb.doc(heatPath(competitionId, sessionId, heatId)).get();
+      if (existingHeat.exists) {
+        const prev = existingHeat.data() as HeatDoc;
+        heatDoc.confirmedJudgeIds = prev.confirmedJudgeIds ?? [];
+        heatDoc.confirmCount = prev.confirmCount ?? heatDoc.confirmedJudgeIds.length;
+      }
+      await adminDb.doc(heatPath(competitionId, sessionId, heatId)).set(heatDoc, { merge: true });
+      heatIndex.push({
+        id: heatId,
+        number: heat.number,
+        styleAbbrev: heat.styleAbbrev,
+        styleName: styleName(heat.styleAbbrev),
+        divisionIds: [...new Set(entries.map((entry) => entry.divisionId))],
       });
-      for (const entry of current) {
-        const key = `${entry.competitorId}:${entry.danceId}`;
-        if (wanted.has(key)) continue;
-        if (entry.scores.length === 0) {
-          await prisma.heatEntry.delete({ where: { id: entry.id } });
-        }
-      }
     }
+
+    const sessionDoc: SessionDoc = {
+      name: sess.name,
+      sortOrder: sess.sortOrder,
+      judgeIds,
+      heatIndex,
+      cddId: sess.cddId ?? null,
+      cddData: sess.cddData ?? null,
+    };
+    await adminDb.doc(sessionPath(competitionId, sessionId)).set(sessionDoc, { merge: true });
+    await rebuildSessionLive(competitionId, sessionId);
   }
 
-  publishLive({ type: "competition", competitionId: competition.id });
-  return { ok: true as const, competitionId: competition.id };
+  return { ok: true as const, competitionId };
 }

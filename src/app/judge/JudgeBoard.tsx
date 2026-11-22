@@ -72,6 +72,8 @@ type HeatState = {
 };
 
 type Props = {
+  competitionId: string;
+  sessionId: string;
   competitionName: string;
   sessionName: string;
   heats: HeatState[];
@@ -164,6 +166,8 @@ function applyMedalBandsToGroup(group: HeatState["groups"][number]) {
 }
 
 export function JudgeBoard({
+  competitionId,
+  sessionId,
   competitionName,
   sessionName,
   heats: initial,
@@ -298,7 +302,15 @@ export function JudgeBoard({
       }));
     });
     const clientRequestId = newClientRequestId();
-    const payload = { heatId: heat.id, confirm, scores, asJudgeId, clientRequestId };
+    const payload = {
+      competitionId,
+      sessionId,
+      heatId: heat.id,
+      confirm,
+      scores,
+      asJudgeId,
+      clientRequestId,
+    };
 
     try {
       const response = await fetch("/api/judge/heat", {

@@ -11,10 +11,15 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { Suspense } from "react";
 import { AppShell } from "@/components/AppShell";
-import { LiveSync } from "@/components/LiveSync";
 import { ScopePicker } from "@/components/ScopePicker";
 import { requireRole } from "@/lib/auth";
-import { prisma } from "@/lib/db";
+import {
+  listCompetitions,
+  listDivisions,
+  listHeats,
+  listSessions,
+} from "@/lib/store/competitions";
+import { listUsers } from "@/lib/store/users";
 import { CompetitionActiveToggle } from "./CompetitionActiveToggle";
 import { CompetitionOps } from "./CompetitionOps";
 import { SessionJudgesEditor } from "./SessionJudgesEditor";
@@ -26,42 +31,15 @@ export default async function AdminPage({ searchParams }: Props) {
   const user = await requireRole(["ADMIN"]);
   const params = await searchParams;
 
-  const competitions = await prisma.competition.findMany({
-    orderBy: { name: "asc" },
-    include: {
-      divisions: {
-        include: {
-          competitors: { orderBy: { bib: "asc" } },
-          dances: { orderBy: { sortOrder: "asc" } },
-        },
-      },
-      sessions: {
-        orderBy: { sortOrder: "asc" },
-        include: {
-          judges: { include: { user: true }, orderBy: { sortOrder: "asc" } },
-          heats: {
-            orderBy: { number: "asc" },
-            include: {
-              entries: {
-                include: {
-                  competitor: { include: { division: true } },
-                  dance: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-
+  const competitions = await listCompetitions();
   const competition =
     competitions.find((item) => item.id === params.competitionId) ?? competitions[0] ?? null;
+  const sessions = competition ? await listSessions(competition.id) : [];
   const session =
-    competition?.sessions.find((item) => item.id === params.sessionId) ??
-    competition?.sessions[0] ??
-    null;
-  const users = await prisma.user.findMany({ orderBy: [{ role: "asc" }, { displayName: "asc" }] });
+    sessions.find((item) => item.id === params.sessionId) ?? sessions[0] ?? null;
+  const divisions = competition ? await listDivisions(competition.id) : [];
+  const heats = competition && session ? await listHeats(competition.id, session.id) : [];
+  const users = await listUsers();
   const judgeUsers = users
     .filter((row) => row.role === "JUDGE")
     .map((row) => ({ id: row.id, label: `${row.displayName} (${row.username})` }));
@@ -86,11 +64,10 @@ export default async function AdminPage({ searchParams }: Props) {
         },
       ]}
     >
-      <LiveSync />
       <Stack spacing={3}>
         <Alert severity="info">
-          LoneStar + Prairie are active; Cedar Ridge starts inactive. CDD structure import uses{" "}
-          <code>countryfloor.cdd.v1</code> and never overwrites confirmed scores.
+          Data is in Cloud Firestore. New competitions come from CDD import. Seed with{" "}
+          <code>npm run seed</code> against emulators or your Firebase project.
         </Alert>
 
         {competition ? (
@@ -100,7 +77,7 @@ export default async function AdminPage({ searchParams }: Props) {
                 id: item.id,
                 label: `${item.name} · ${item.active ? "Active" : "Inactive"}`,
               }))}
-              sessions={competition.sessions.map((item) => ({ id: item.id, label: item.name }))}
+              sessions={sessions.map((item) => ({ id: item.id, label: item.name }))}
               competitionId={competition.id}
               sessionId={session?.id}
             />
@@ -120,19 +97,16 @@ export default async function AdminPage({ searchParams }: Props) {
                   {competition.location ? ` · ${competition.location}` : ""} · {competition.status}
                 </Typography>
                 <CompetitionActiveToggle competitionId={competition.id} active={competition.active} />
-                <Typography variant="body2" color="text.secondary">
-                  Only active competitions appear for judges and scrutineers.
-                </Typography>
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                  {competition.divisions.map((division) => (
+                  {divisions.map((division) => (
                     <Chip
                       key={division.id}
                       label={`${division.name} · ${division.scale} · Rule9 ${division.rule9Count}`}
                       color="primary"
                     />
                   ))}
-                  <Chip label={`${competition.sessions.length} sessions`} />
-                  <Chip label={`${session?.heats.length ?? 0} heats in selected session`} />
+                  <Chip label={`${sessions.length} sessions`} />
+                  <Chip label={`${heats.length} heats in selected session`} />
                 </Stack>
               </Stack>
             ) : (
@@ -141,13 +115,11 @@ export default async function AdminPage({ searchParams }: Props) {
           </CardContent>
         </Card>
 
-        {competition ? (
-          <Card>
-            <CardContent>
-              <CompetitionOps />
-            </CardContent>
-          </Card>
-        ) : null}
+        <Card>
+          <CardContent>
+            <CompetitionOps />
+          </CardContent>
+        </Card>
 
         <Card>
           <CardContent>
@@ -170,16 +142,17 @@ export default async function AdminPage({ searchParams }: Props) {
           <Card>
             <CardContent>
               <SessionJudgesEditor
+                competitionId={competition!.id}
                 sessionId={session.id}
                 sessionName={session.name}
                 allJudges={judgeUsers}
-                assignedIds={session.judges.map((judge) => judge.userId)}
+                assignedIds={session.judgeIds}
               />
             </CardContent>
           </Card>
         ) : null}
 
-        {competition?.divisions.map((division) => (
+        {divisions.map((division) => (
           <Card key={division.id}>
             <CardContent>
               <Typography variant="h5" gutterBottom>
@@ -210,9 +183,6 @@ export default async function AdminPage({ searchParams }: Props) {
             <Typography variant="h5" gutterBottom>
               Session · {session?.name ?? "—"}
             </Typography>
-            <Typography gutterBottom>
-              Judges: {session?.judges.map((judge) => judge.user.displayName).join(", ") || "—"}
-            </Typography>
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -223,19 +193,18 @@ export default async function AdminPage({ searchParams }: Props) {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {session?.heats.map((heat) => {
-                  const style = heat.entries[0]?.dance.name ?? "—";
-                  const divisions = [
-                    ...new Set(heat.entries.map((entry) => entry.competitor.division.name)),
+                {heats.map((heat) => {
+                  const divisionsLabel = [
+                    ...new Set(heat.entries.map((entry) => entry.divisionName)),
                   ].join(" + ");
-                  const couples = [
-                    ...new Set(heat.entries.map((entry) => String(entry.competitor.bib))),
-                  ].join(", ");
+                  const couples = [...new Set(heat.entries.map((entry) => String(entry.bib)))].join(
+                    ", ",
+                  );
                   return (
                     <TableRow key={heat.id}>
                       <TableCell>{heat.number}</TableCell>
-                      <TableCell>{style}</TableCell>
-                      <TableCell>{divisions || "—"}</TableCell>
+                      <TableCell>{heat.styleName}</TableCell>
+                      <TableCell>{divisionsLabel || "—"}</TableCell>
                       <TableCell>{couples}</TableCell>
                     </TableRow>
                   );

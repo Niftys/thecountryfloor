@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { prisma } from "@/lib/db";
-import { publishLive } from "@/lib/live";
+import { buildAndCacheScrutineerView } from "@/lib/results";
+import { parseScoreKey } from "@/lib/store/paths";
+import { getHeat, getUsersByIds, updateJudgeMark } from "@/lib/store/competitions";
+import { requiresPlacement } from "@/lib/scoring";
 
 export async function POST(request: Request) {
   const session = await getSession();
@@ -10,63 +12,60 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json()) as {
+    competitionId?: string;
+    sessionId?: string;
+    divisionId?: string;
     scoreId?: string;
     medal?: string | null;
     placement?: number | null;
     notes?: string;
     scratched?: boolean;
   };
-  if (!body.scoreId) return NextResponse.json({ error: "Missing score" }, { status: 400 });
 
-  const existing = await prisma.score.findUnique({
-    where: { id: body.scoreId },
-    include: {
-      heatEntry: {
-        include: { heat: { include: { session: { include: { competition: true } } } } },
-      },
-    },
-  });
-  if (!existing) return NextResponse.json({ error: "Score not found" }, { status: 404 });
-  if (!existing.heatEntry.heat.session.competition.active) {
-    return NextResponse.json({ error: "This competition is inactive." }, { status: 403 });
+  if (!body.competitionId || !body.sessionId || !body.divisionId || !body.scoreId) {
+    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const before = {
-    medal: existing.medal,
-    placement: existing.placement,
-    notes: existing.notes,
-    scratched: existing.scratched,
-  };
-  const after = {
-    medal: body.scratched ? null : body.medal ?? null,
-    placement: body.scratched ? null : body.placement ?? null,
-    notes: body.notes ?? "",
-    scratched: Boolean(body.scratched),
-  };
+  const parsed = parseScoreKey(body.scoreId);
+  if (!parsed) return NextResponse.json({ error: "Invalid score id" }, { status: 400 });
 
-  await prisma.score.update({
-    where: { id: body.scoreId },
-    data: {
-      ...after,
+  const heat = await getHeat(body.competitionId, body.sessionId, parsed.heatId);
+  if (!heat) return NextResponse.json({ error: "Heat not found" }, { status: 404 });
+  const entry = heat.entries.find((item) => item.id === parsed.entryId);
+  if (!entry) return NextResponse.json({ error: "Entry not found" }, { status: 404 });
+
+  const users = await getUsersByIds([parsed.judgeId]);
+  const judge = users.get(parsed.judgeId);
+
+  await updateJudgeMark({
+    competitionId: body.competitionId,
+    sessionId: body.sessionId,
+    heatId: parsed.heatId,
+    judgeId: parsed.judgeId,
+    entryId: parsed.entryId,
+    mark: {
+      medal: body.scratched ? null : (body.medal ?? null),
+      placement:
+        body.scratched || !requiresPlacement(entry.scale) || body.placement == null
+          ? null
+          : body.placement,
+      notes: body.notes ?? "",
+      scratched: Boolean(body.scratched),
       overridden: true,
     },
+    actorId: session.id,
+    actorName: session.displayName,
+    bib: entry.bib,
+    dance: entry.danceName,
+    judgeName: judge?.displayName ?? parsed.judgeId,
+    divisionId: body.divisionId,
   });
 
-  await prisma.scoreAudit.create({
-    data: {
-      scoreId: body.scoreId,
-      actorId: session.id,
-      beforeJson: JSON.stringify(before),
-      afterJson: JSON.stringify(after),
-    },
+  const view = await buildAndCacheScrutineerView({
+    competitionId: body.competitionId,
+    sessionId: body.sessionId,
+    divisionId: body.divisionId,
   });
 
-  publishLive({
-    type: "scores",
-    competitionId: existing.heatEntry.heat.session.competitionId,
-    sessionId: existing.heatEntry.heat.sessionId,
-    heatId: existing.heatEntry.heatId,
-  });
-
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, view });
 }

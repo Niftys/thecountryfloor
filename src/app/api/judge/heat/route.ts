@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { heatStyleConflict } from "@/lib/dances";
-import { prisma } from "@/lib/db";
-import { publishLive } from "@/lib/live";
+import { buildAndCacheScrutineerView } from "@/lib/results";
 import { medalPlacementConflict, requiresPlacement, type Scale } from "@/lib/scoring";
+import {
+  getCompetition,
+  getHeat,
+  getSession as getCompSession,
+  submitJudgeHeat,
+} from "@/lib/store/competitions";
+import type { MarkEmbedded } from "@/lib/store/types";
 
 type ScorePayload = {
   heatEntryId: string;
@@ -16,13 +22,12 @@ type ScorePayload = {
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session || (session.role !== "JUDGE" && session.role !== "ADMIN")) {
-    return NextResponse.json(
-      { error: "Session expired. Sign out and sign in again (needed after a database reseed)." },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: "Session expired. Sign in again." }, { status: 401 });
   }
 
   const body = (await request.json()) as {
+    competitionId?: string;
+    sessionId?: string;
     heatId?: string;
     confirm?: boolean;
     asJudgeId?: string;
@@ -30,187 +35,119 @@ export async function POST(request: Request) {
     scores?: ScorePayload[];
   };
 
-  if (!body.heatId || !Array.isArray(body.scores)) {
+  if (!body.competitionId || !body.sessionId || !body.heatId || !Array.isArray(body.scores)) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  if (body.clientRequestId) {
-    const prior = await prisma.heatSubmission.findFirst({
-      where: { clientRequestId: body.clientRequestId },
-    });
-    if (prior) return NextResponse.json({ ok: true, idempotent: true });
+  const competition = await getCompetition(body.competitionId);
+  if (!competition?.active) {
+    return NextResponse.json({ error: "Competition is inactive." }, { status: 403 });
   }
 
-  const heat = await prisma.heat.findUnique({
-    where: { id: body.heatId },
-    include: {
-      session: { include: { judges: true, competition: true } },
-      entries: { include: { competitor: { include: { division: true } }, dance: true } },
-    },
-  });
+  const compSession = await getCompSession(body.competitionId, body.sessionId);
+  if (!compSession) {
+    return NextResponse.json({ error: "Session not found." }, { status: 404 });
+  }
+
+  let judgeId = session.id;
+  if (session.role === "ADMIN") {
+    if (!body.asJudgeId || !compSession.judgeIds.includes(body.asJudgeId)) {
+      return NextResponse.json({ error: "Admins must choose a panel judge to score as." }, { status: 400 });
+    }
+    judgeId = body.asJudgeId;
+  } else if (!compSession.judgeIds.includes(session.id)) {
+    return NextResponse.json({ error: "You are not assigned to this session." }, { status: 403 });
+  }
+
+  const heat = await getHeat(body.competitionId, body.sessionId, body.heatId);
   if (!heat) {
-    return NextResponse.json(
-      { error: "Heat not found. Refresh the page after reseeding the database." },
-      { status: 404 },
-    );
-  }
-  if (!heat.session.competition.active) {
-    return NextResponse.json(
-      { error: "This competition is inactive. An admin must mark it active before scoring." },
-      { status: 403 },
-    );
+    return NextResponse.json({ error: "Heat not found." }, { status: 404 });
   }
 
-  const styleError = heatStyleConflict(heat.entries.map((entry) => entry.dance.abbrev));
+  const styleError = heatStyleConflict(heat.entries.map((entry) => entry.danceAbbrev));
   if (styleError) {
     return NextResponse.json({ error: styleError }, { status: 400 });
   }
 
-  const panelIds = new Set(heat.session.judges.map((judge) => judge.userId));
-
-  let judgeId = session.id;
-  if (session.role === "ADMIN") {
-    const requested = body.asJudgeId;
-    if (!requested || !panelIds.has(requested)) {
-      return NextResponse.json(
-        { error: "Admins must choose a panel judge to score as." },
-        { status: 400 },
-      );
-    }
-    judgeId = requested;
-  } else if (!panelIds.has(session.id)) {
-    return NextResponse.json({ error: "Not assigned to this session" }, { status: 403 });
-  }
-
-  const judge = await prisma.user.findUnique({ where: { id: judgeId } });
-  if (!judge) {
-    return NextResponse.json(
-      { error: "Judge account missing. Sign in again after reseeding." },
-      { status: 401 },
-    );
-  }
-
-  const entryById = new Map(heat.entries.map((entry) => [entry.id, entry]));
-  const normalized: ScorePayload[] = [];
-
+  const byDivision = new Map<string, ScorePayload[]>();
   for (const score of body.scores) {
-    const entry = entryById.get(score.heatEntryId);
+    const entry = heat.entries.find((item) => item.id === score.heatEntryId);
     if (!entry) {
-      return NextResponse.json(
-        { error: "Score does not belong to this heat. Refresh the page." },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Unknown heat entry." }, { status: 400 });
     }
-    const scale = entry.competitor.division.scale as Scale;
-    const needsPlace = requiresPlacement(scale);
-    normalized.push({
-      ...score,
-      placement: score.scratched || !needsPlace ? null : score.placement,
-    });
+    const list = byDivision.get(entry.divisionId) ?? [];
+    list.push(score);
+    byDivision.set(entry.divisionId, list);
   }
 
-  if (body.confirm) {
-    const byGroup = new Map<string, ScorePayload[]>();
-    for (const score of normalized) {
-      if (score.scratched) continue;
-      const entry = entryById.get(score.heatEntryId)!;
-      const scale = entry.competitor.division.scale as Scale;
-      const key = `${entry.competitor.divisionId}:${entry.danceId}`;
-      const list = byGroup.get(key) ?? [];
-      list.push(score);
-      byGroup.set(key, list);
-
-      if (!score.medal) {
-        return NextResponse.json(
-          { error: `Pick a medal for bib ${entry.competitor.bib} in ${entry.dance.name}.` },
-          { status: 400 },
-        );
+  for (const [divisionId, scores] of byDivision) {
+    const entry = heat.entries.find((item) => item.divisionId === divisionId);
+    const scale = (entry?.scale ?? "COUPLES") as Scale;
+    const active = scores.filter((score) => !score.scratched);
+    if (requiresPlacement(scale) && active.length > 1) {
+      for (const score of active) {
+        if (!score.medal) {
+          return NextResponse.json({ error: "Every dancing couple needs a medal." }, { status: 400 });
+        }
+        if (!score.placement) {
+          return NextResponse.json({ error: "Every dancing couple needs a place." }, { status: 400 });
+        }
       }
-      if (requiresPlacement(scale) && !score.placement) {
-        return NextResponse.json(
-          { error: `Pick a place for bib ${entry.competitor.bib} in ${entry.dance.name}.` },
-          { status: 400 },
-        );
-      }
-    }
-
-    for (const scores of byGroup.values()) {
-      const entry = entryById.get(scores[0].heatEntryId)!;
-      const scale = entry.competitor.division.scale as Scale;
-      if (!requiresPlacement(scale)) continue;
-
-      const places = scores.map((score) => score.placement);
+      const places = active.map((score) => score.placement);
       if (new Set(places).size !== places.length) {
-        return NextResponse.json(
-          {
-            error: `Each couple in ${entry.competitor.division.name} · ${entry.dance.name} needs a different place.`,
-          },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "Places must be unique within a division." }, { status: 400 });
       }
-
-      const medalPlaceError = medalPlacementConflict(
-        scores.map((score) => {
-          const row = entryById.get(score.heatEntryId)!;
-          return {
-            bib: row.competitor.bib,
-            medal: score.medal!,
-            placement: score.placement!,
-          };
+      const conflict = medalPlacementConflict(
+        active.map((score) => {
+          const heatEntry = heat.entries.find((item) => item.id === score.heatEntryId)!;
+          return { bib: heatEntry.bib, medal: score.medal!, placement: score.placement! };
         }),
         scale,
       );
-      if (medalPlaceError) {
-        return NextResponse.json({ error: medalPlaceError }, { status: 400 });
-      }
+      if (conflict) return NextResponse.json({ error: conflict }, { status: 400 });
     }
   }
 
-  for (const score of normalized) {
-    await prisma.score.upsert({
-      where: {
-        heatEntryId_judgeId: { heatEntryId: score.heatEntryId, judgeId },
-      },
-      create: {
-        heatEntryId: score.heatEntryId,
-        judgeId,
-        medal: score.scratched ? null : score.medal,
-        placement: score.scratched ? null : score.placement,
-        notes: score.notes ?? "",
-        scratched: Boolean(score.scratched),
-      },
-      update: {
-        medal: score.scratched ? null : score.medal,
-        placement: score.scratched ? null : score.placement,
-        notes: score.notes ?? "",
-        scratched: Boolean(score.scratched),
-        overridden: false,
-      },
-    });
+  const marks: Record<string, MarkEmbedded> = {};
+  for (const score of body.scores) {
+    marks[score.heatEntryId] = {
+      medal: score.medal,
+      placement: score.placement,
+      notes: score.notes ?? "",
+      scratched: score.scratched,
+      overridden: false,
+    };
   }
 
-  if (body.confirm) {
-    await prisma.heatSubmission.upsert({
-      where: { heatId_judgeId: { heatId: body.heatId, judgeId } },
-      create: {
-        heatId: body.heatId,
-        judgeId,
-        confirmedAt: new Date(),
-        clientRequestId: body.clientRequestId || null,
-      },
-      update: {
-        confirmedAt: new Date(),
-        ...(body.clientRequestId ? { clientRequestId: body.clientRequestId } : {}),
-      },
+  try {
+    const result = await submitJudgeHeat({
+      competitionId: body.competitionId,
+      sessionId: body.sessionId,
+      heatId: body.heatId,
+      judgeId,
+      confirm: Boolean(body.confirm),
+      clientRequestId: body.clientRequestId,
+      marks,
     });
+
+    if (body.confirm) {
+      const touchedDivisions = [...new Set(heat.entries.map((entry) => entry.divisionId))];
+      await Promise.all(
+        touchedDivisions.map((divisionId) =>
+          buildAndCacheScrutineerView({
+            competitionId: body.competitionId!,
+            sessionId: body.sessionId!,
+            divisionId,
+          }),
+        ),
+      );
+    }
+
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Could not save scores." },
+      { status: 400 },
+    );
   }
-
-  publishLive({
-    type: body.confirm ? "submissions" : "scores",
-    competitionId: heat.session.competition.id,
-    sessionId: heat.sessionId,
-    heatId: heat.id,
-  });
-
-  return NextResponse.json({ ok: true });
 }

@@ -12,13 +12,20 @@ import { useState } from "react";
 type JudgeOption = { id: string; label: string };
 
 type Props = {
+  competitionId: string;
   sessionId: string;
   sessionName: string;
   allJudges: JudgeOption[];
   assignedIds: string[];
 };
 
-export function SessionJudgesEditor({ sessionId, sessionName, allJudges, assignedIds }: Props) {
+export function SessionJudgesEditor({
+  competitionId,
+  sessionId,
+  sessionName,
+  allJudges,
+  assignedIds,
+}: Props) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>(assignedIds);
   const [message, setMessage] = useState("");
@@ -32,7 +39,7 @@ export function SessionJudgesEditor({ sessionId, sessionName, allJudges, assigne
     const response = await fetch(`/api/admin/sessions/${sessionId}/judges`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ judgeIds: selected }),
+      body: JSON.stringify({ judgeIds: selected, competitionId }),
     });
     setBusy(false);
     if (!response.ok) {

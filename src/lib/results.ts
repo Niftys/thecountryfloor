@@ -1,6 +1,19 @@
 import type { DivisionPacket } from "./cdd/adapter";
 import { danceRowFromBreakdown, exportDivision } from "./cdd/adapter";
-import { prisma } from "./db";
+import {
+  getCompetition,
+  getDivision,
+  getDivisionResults,
+  getSession,
+  getSessionLive,
+  getUsersByIds,
+  listAudits,
+  listHeats,
+  listJudgeSheetsForHeat,
+  saveDivisionResults,
+} from "@/lib/store/competitions";
+import { scoreKey } from "@/lib/store/paths";
+import type { HeatEntryEmbedded, MarkEmbedded } from "@/lib/store/types";
 import {
   OUTLIER_STEPS,
   medalPoints,
@@ -12,69 +25,6 @@ import {
   type Scale,
 } from "./scoring";
 
-const competitionInclude = {
-  divisions: {
-    include: {
-      dances: { orderBy: { sortOrder: "asc" as const } },
-      competitors: { orderBy: { bib: "asc" as const } },
-    },
-  },
-  sessions: {
-    orderBy: { sortOrder: "asc" as const },
-    include: {
-      judges: { include: { user: true }, orderBy: { sortOrder: "asc" as const } },
-      heats: {
-        orderBy: { number: "asc" as const },
-        include: {
-          submissions: true,
-          entries: {
-            include: {
-              competitor: { include: { division: true } },
-              dance: true,
-              scores: { include: { judge: true } },
-            },
-          },
-        },
-      },
-    },
-  },
-} as const;
-
-export async function listCompetitions(options: { activeOnly?: boolean } = {}) {
-  return prisma.competition.findMany({
-    where: options.activeOnly ? { active: true } : undefined,
-    orderBy: { name: "asc" },
-    select: { id: true, name: true, dateLabel: true, status: true, active: true },
-  });
-}
-
-export async function loadCompetition(
-  competitionId?: string | null,
-  options: { activeOnly?: boolean } = {},
-) {
-  if (competitionId) {
-    return prisma.competition.findUnique({
-      where: { id: competitionId },
-      include: competitionInclude,
-    });
-  }
-  return prisma.competition.findFirst({
-    where: options.activeOnly ? { active: true } : undefined,
-    orderBy: { name: "asc" },
-    include: competitionInclude,
-  });
-}
-
-export type LoadedCompetition = NonNullable<Awaited<ReturnType<typeof loadCompetition>>>;
-
-export function pickSession(competition: LoadedCompetition, sessionId?: string | null) {
-  return competition.sessions.find((session) => session.id === sessionId) ?? competition.sessions[0] ?? null;
-}
-
-export function pickDivision(competition: LoadedCompetition, divisionId?: string | null) {
-  return competition.divisions.find((division) => division.id === divisionId) ?? competition.divisions[0] ?? null;
-}
-
 export type HeatStatus = {
   id: string;
   number: number;
@@ -84,10 +34,7 @@ export type HeatStatus = {
   complete: boolean;
 };
 
-export type AlertItem = {
-  id: string;
-  text: string;
-};
+export type AlertItem = { id: string; text: string };
 
 export type SummaryRow = {
   bib: number;
@@ -132,6 +79,9 @@ export type DanceSheet = {
 
 export type ScoreChoice = {
   scoreId: string;
+  heatId: string;
+  entryId: string;
+  judgeId: string;
   dance: string;
   bib: number;
   couple: string;
@@ -160,82 +110,127 @@ export type ScrutineerView = {
   packet: DivisionPacket;
 };
 
-type HeatEntryLoaded = LoadedCompetition["sessions"][number]["heats"][number]["entries"][number];
-type ScoreLoaded = HeatEntryLoaded["scores"][number];
+type EntryMarks = {
+  entry: HeatEntryEmbedded;
+  byJudge: Map<string, MarkEmbedded & { judgeId: string; judgeName: string }>;
+};
 
-function officialMarks(entry: HeatEntryLoaded, judgeOrder: string[], scale: Scale) {
-  const byJudge = new Map(entry.scores.map((score) => [score.judgeId, score]));
+function officialMarks(
+  entryMarks: EntryMarks,
+  judgeOrder: string[],
+  scale: Scale,
+) {
   const ordered = judgeOrder
-    .map((id) => byJudge.get(id))
-    .filter((score): score is ScoreLoaded => score != null);
+    .map((id) => entryMarks.byJudge.get(id))
+    .filter((score): score is MarkEmbedded & { judgeId: string; judgeName: string } => score != null);
   const scratchFlags = ordered.map((score) => score.scratched);
   const disagreed = scratchFlags.some(Boolean) && scratchFlags.some((flag) => !flag);
   const allScratched = ordered.length > 0 && scratchFlags.every(Boolean);
-  const active = ordered.filter((score): score is ScoreLoaded & { medal: string } => {
+  const active = ordered.filter((score) => {
     if (score.scratched || !score.medal) return false;
     if (scale === "COUPLES" && score.placement == null) return false;
     return true;
-  });
+  }) as Array<MarkEmbedded & { judgeId: string; judgeName: string; medal: string }>;
   return { ordered, disagreed, allScratched, active };
 }
 
-export function buildScrutineerView(
-  competition: LoadedCompetition,
-  options: { sessionId?: string | null; divisionId?: string | null } = {},
-): ScrutineerView | null {
-  const division = pickDivision(competition, options.divisionId);
-  const session = pickSession(competition, options.sessionId);
-  if (!division || !session) return null;
+export async function buildAndCacheScrutineerView(input: {
+  competitionId: string;
+  sessionId: string;
+  divisionId: string;
+}): Promise<ScrutineerView | null> {
+  const [competition, division, session, live, heats, audits] = await Promise.all([
+    getCompetition(input.competitionId),
+    getDivision(input.competitionId, input.divisionId),
+    getSession(input.competitionId, input.sessionId),
+    getSessionLive(input.competitionId, input.sessionId),
+    listHeats(input.competitionId, input.sessionId),
+    listAudits(input.competitionId, input.divisionId),
+  ]);
+  if (!competition || !division || !session) return null;
 
-  const scale = division.scale as Scale;
-  const judgeUsers = session.judges.map((judge) => judge.user);
-  const judgeIds = judgeUsers.map((judge) => judge.id);
-  const judgeNames = judgeUsers.map((judge) => judge.displayName);
+  const users = await getUsersByIds(session.judgeIds);
+  const judgeIds = session.judgeIds.filter((id) => users.has(id));
+  const judgeNames = judgeIds.map((id) => users.get(id)!.displayName);
+  const scale = division.scale;
 
-  const heats: HeatStatus[] = session.heats.map((heat) => {
-    const style = heat.entries[0]?.dance.name ?? `Heat ${heat.number}`;
-    const divisions = [
-      ...new Set(heat.entries.map((entry) => entry.competitor.division.name)),
-    ];
-    return {
-      id: heat.id,
-      number: heat.number,
-      label: divisions.length > 1 ? `${style} · ${divisions.join(" + ")}` : style,
-      confirmed: heat.submissions.length,
-      judges: judgeUsers.length,
-      complete: heat.submissions.length >= judgeUsers.length && judgeUsers.length > 0,
-    };
-  });
+  const heatStatuses: HeatStatus[] =
+    live?.heats ??
+    heats.map((heat) => {
+      const divisions = [...new Set(heat.entries.map((entry) => entry.divisionName))];
+      const style = heat.styleName;
+      return {
+        id: heat.id,
+        number: heat.number,
+        label: divisions.length > 1 ? `${style} · ${divisions.join(" + ")}` : style,
+        confirmed: heat.confirmCount,
+        judges: judgeIds.length,
+        complete: judgeIds.length > 0 && heat.confirmCount >= judgeIds.length,
+      };
+    });
+
+  const sheetsByHeat = await Promise.all(
+    heats.map(async (heat) => ({
+      heat,
+      sheets: await listJudgeSheetsForHeat(input.competitionId, input.sessionId, heat.id),
+    })),
+  );
 
   const alerts: AlertItem[] = [];
   const scores: ScoreChoice[] = [];
   const danceRows = new Map<string, DanceSheet["rows"]>();
   const placeByCouple = new Map<string, Map<string, number>>();
   const overriddenByCouple = new Map<string, Map<string, boolean>>();
+  const judgePlacesByCouple = new Map<string, number[]>();
 
-  for (const dance of division.dances) {
-    danceRows.set(dance.id, []);
-  }
+  for (const dance of division.dances) danceRows.set(dance.id, []);
 
-  for (const heat of session.heats) {
-    const byDance = new Map<string, typeof heat.entries>();
-    for (const entry of heat.entries) {
-      if (entry.competitor.divisionId !== division.id) continue;
+  for (const { heat, sheets } of sheetsByHeat) {
+    const entries = heat.entries.filter((entry) => entry.divisionId === division.id);
+    const byDance = new Map<string, EntryMarks[]>();
+
+    for (const entry of entries) {
+      const byJudge = new Map<string, MarkEmbedded & { judgeId: string; judgeName: string }>();
+      for (const sheet of sheets) {
+        const mark = sheet.marks[entry.id];
+        if (!mark) continue;
+        const judge = users.get(sheet.judgeId);
+        byJudge.set(sheet.judgeId, {
+          ...mark,
+          judgeId: sheet.judgeId,
+          judgeName: judge?.displayName ?? sheet.judgeId,
+        });
+        scores.push({
+          scoreId: scoreKey(heat.id, entry.id, sheet.judgeId),
+          heatId: heat.id,
+          entryId: entry.id,
+          judgeId: sheet.judgeId,
+          dance: entry.danceName,
+          bib: entry.bib,
+          couple: entry.name,
+          judge: judge?.displayName ?? sheet.judgeId,
+          medal: mark.medal ?? "",
+          placement: mark.placement,
+          notes: mark.notes,
+          scratched: mark.scratched,
+          scale,
+        });
+      }
       const list = byDance.get(entry.danceId) ?? [];
-      list.push(entry);
+      list.push({ entry, byJudge });
       byDance.set(entry.danceId, list);
     }
 
-    for (const [danceId, entries] of byDance) {
+    for (const [danceId, entryMarksList] of byDance) {
       const inputs: CoupleInput[] = [];
       const activeById = new Map<string, ReturnType<typeof officialMarks>["active"]>();
 
-      for (const entry of entries) {
-        const marks = officialMarks(entry, judgeIds, scale);
+      for (const entryMarks of entryMarksList) {
+        const marks = officialMarks(entryMarks, judgeIds, scale);
         if (marks.disagreed) {
           alerts.push({
-            id: `scratch-${entry.id}`,
-            text: `Bib ${entry.competitor.bib} scratch does not match across judges in ${entry.dance.name}.`,
+            id: `scratch-${entryMarks.entry.id}`,
+            text: `Bib ${entryMarks.entry.bib} scratch does not match across judges in ${entryMarks.entry.danceName}.`,
           });
         }
         const points = marks.active.map((score) => medalPoints(score.medal, scale));
@@ -245,51 +240,46 @@ export function buildScrutineerView(
           const gap = points[index] - median(others);
           if (gap >= OUTLIER_STEPS) {
             alerts.push({
-              id: `low-${score.id}`,
-              text: `${score.judge.displayName} marked ${score.medal} on bib ${entry.competitor.bib} in ${entry.dance.name}, ${Math.round(gap)} steps below the others.`,
+              id: `low-${score.judgeId}-${entryMarks.entry.id}`,
+              text: `${score.judgeName} marked ${score.medal} on bib ${entryMarks.entry.bib} in ${entryMarks.entry.danceName}, ${Math.round(gap)} steps below the others.`,
             });
           }
         });
 
-        for (const score of entry.scores) {
-          scores.push({
-            scoreId: score.id,
-            dance: entry.dance.name,
-            bib: entry.competitor.bib,
-            couple: entry.competitor.name,
-            judge: score.judge.displayName,
-            medal: score.medal ?? "",
-            placement: score.placement,
-            notes: score.notes,
-            scratched: score.scratched,
-            scale,
-          });
-        }
-
         if (marks.allScratched || marks.active.length === 0) continue;
-        activeById.set(entry.competitorId, marks.active);
+        activeById.set(entryMarks.entry.competitorId, marks.active);
         inputs.push({
-          id: entry.competitorId,
+          id: entryMarks.entry.competitorId,
           marks: marks.active.map((score) => ({
             judgeId: score.judgeId,
             medal: score.medal,
             placement: score.placement ?? medalPoints(score.medal, scale),
           })),
         });
+
+        const list = judgePlacesByCouple.get(entryMarks.entry.competitorId) ?? [];
+        for (const score of marks.active) {
+          list.push(
+            scale === "PROAM"
+              ? medalPoints(score.medal, scale)
+              : (score.placement ?? medalPoints(score.medal, scale)),
+          );
+        }
+        judgePlacesByCouple.set(entryMarks.entry.competitorId, list);
       }
 
       const ranked = rankDance(inputs, scale);
       const sheet = danceRows.get(danceId) ?? [];
       for (const row of ranked) {
-        const entry = entries.find((item) => item.competitorId === row.id);
-        if (!entry) continue;
+        const entryMarks = entryMarksList.find((item) => item.entry.competitorId === row.id);
+        if (!entryMarks) continue;
         const active = activeById.get(row.id) ?? [];
         const cells = judgeIds
           .map((judgeId) => {
             const score = active.find((item) => item.judgeId === judgeId);
             return score
               ? {
-                  judge: score.judge.displayName,
+                  judge: score.judgeName,
                   medal: score.medal,
                   placement: score.placement,
                   overridden: score.overridden,
@@ -307,11 +297,10 @@ export function buildScrutineerView(
             } => cell != null,
           );
 
-        const hasOverride = active.some((score) => score.overridden) || cells.some((cell) => cell.overridden);
-
+        const hasOverride = active.some((score) => score.overridden);
         sheet.push({
-          bib: entry.competitor.bib,
-          name: entry.competitor.name,
+          bib: entryMarks.entry.bib,
+          name: entryMarks.entry.name,
           cells,
           ordered: row.ordered.join("-"),
           mark: row.mark,
@@ -323,32 +312,16 @@ export function buildScrutineerView(
           place: row.place,
         });
 
-        const places = placeByCouple.get(entry.competitorId) ?? new Map<string, number>();
+        const places = placeByCouple.get(entryMarks.entry.competitorId) ?? new Map<string, number>();
         places.set(danceId, row.place);
-        placeByCouple.set(entry.competitorId, places);
+        placeByCouple.set(entryMarks.entry.competitorId, places);
 
-        const overrides = overriddenByCouple.get(entry.competitorId) ?? new Map<string, boolean>();
+        const overrides =
+          overriddenByCouple.get(entryMarks.entry.competitorId) ?? new Map<string, boolean>();
         overrides.set(danceId, hasOverride);
-        overriddenByCouple.set(entry.competitorId, overrides);
+        overriddenByCouple.set(entryMarks.entry.competitorId, overrides);
       }
       danceRows.set(danceId, sheet);
-    }
-  }
-
-  const judgePlacesByCouple = new Map<string, number[]>();
-  for (const heat of session.heats) {
-    for (const entry of heat.entries) {
-      if (entry.competitor.divisionId !== division.id) continue;
-      const marks = officialMarks(entry, judgeIds, scale);
-      const list = judgePlacesByCouple.get(entry.competitorId) ?? [];
-      for (const score of marks.active) {
-        list.push(
-          scale === "PROAM"
-            ? medalPoints(score.medal, scale)
-            : (score.placement ?? medalPoints(score.medal, scale)),
-        );
-      }
-      judgePlacesByCouple.set(entry.competitorId, list);
     }
   }
 
@@ -426,7 +399,11 @@ export function buildScrutineerView(
       rows: dance.rows.map((row) =>
         danceRowFromBreakdown(
           { bib: row.bib, name: row.name },
-          row.cells.map((cell) => ({ judge: cell.judge, medal: cell.medal, placement: cell.placement })),
+          row.cells.map((cell) => ({
+            judge: cell.judge,
+            medal: cell.medal,
+            placement: cell.placement,
+          })),
           {
             id: String(row.bib),
             ordered: row.ordered.split("-").map(Number),
@@ -444,7 +421,7 @@ export function buildScrutineerView(
     })),
   });
 
-  return {
+  const view: ScrutineerView = {
     competition: {
       id: competition.id,
       name: competition.name,
@@ -456,48 +433,56 @@ export function buildScrutineerView(
     divisionId: division.id,
     divisionName: division.name,
     sessionName: session.name,
-    sessionComplete: heats.length > 0 && heats.every((heat) => heat.complete),
-    heats,
+    sessionComplete: heatStatuses.length > 0 && heatStatuses.every((heat) => heat.complete),
+    heats: heatStatuses,
     alerts,
     summary,
     dances,
     scores,
-    audits: [],
+    audits: audits.map((audit) => ({
+      id: audit.id,
+      at: audit.at,
+      actor: audit.actorName,
+      bib: audit.bib,
+      dance: audit.dance,
+      judge: audit.judgeName,
+      before: audit.before,
+      after: audit.after,
+    })),
     packet,
   };
-}
 
-export async function loadAuditsForDivision(competitionId: string, divisionId: string): Promise<AuditRow[]> {
-  const audits = await prisma.scoreAudit.findMany({
-    where: {
-      score: {
-        heatEntry: {
-          competitor: { divisionId },
-          heat: { session: { competitionId } },
-        },
-      },
+  await saveDivisionResults(input.competitionId, input.divisionId, {
+    view: {
+      ...view,
+      // keep packet for export; strip nothing essential
     },
-    include: {
-      actor: true,
-      score: {
-        include: {
-          judge: true,
-          heatEntry: { include: { competitor: true, dance: true } },
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 100,
   });
 
-  return audits.map((audit) => ({
-    id: audit.id,
-    at: audit.createdAt.toISOString(),
-    actor: audit.actor.displayName,
-    bib: audit.score.heatEntry.competitor.bib,
-    dance: audit.score.heatEntry.dance.name,
-    judge: audit.score.judge.displayName,
-    before: audit.beforeJson,
-    after: audit.afterJson,
-  }));
+  return view;
+}
+
+/** Prefer cached results doc when present; rebuild when missing. */
+export async function loadScrutineerView(input: {
+  competitionId: string;
+  sessionId: string;
+  divisionId: string;
+  forceRebuild?: boolean;
+}): Promise<ScrutineerView | null> {
+  if (!input.forceRebuild) {
+    const cached = await getDivisionResults(input.competitionId, input.divisionId);
+    const view = cached?.view as ScrutineerView | undefined;
+    if (view && view.sessionId === input.sessionId) {
+      const live = await getSessionLive(input.competitionId, input.sessionId);
+      if (live) {
+        return {
+          ...view,
+          heats: live.heats,
+          sessionComplete: live.heats.length > 0 && live.heats.every((heat) => heat.complete),
+        };
+      }
+      return view;
+    }
+  }
+  return buildAndCacheScrutineerView(input);
 }

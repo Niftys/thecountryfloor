@@ -15,10 +15,12 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useCallback, useEffect, useState } from "react";
-import { useLiveSync } from "@/hooks/useLiveSync";
+import { useEffect, useState } from "react";
+import { useFirestoreDoc } from "@/hooks/useFirestoreDoc";
 import type { ScrutineerView } from "@/lib/results";
 import { COUPLES_SCALE, PROAM_SCALE, requiresPlacement } from "@/lib/scoring";
+import { divisionResultsPath, sessionLivePath } from "@/lib/store/paths";
+import type { SessionLiveDoc } from "@/lib/store/types";
 
 type Props = { initial: ScrutineerView };
 
@@ -32,40 +34,38 @@ export function ScrutineerBoard({ initial }: Props) {
   const [scratched, setScratched] = useState(selected?.scratched ?? false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [liveLabel, setLiveLabel] = useState("Connecting…");
+  const [liveLabel, setLiveLabel] = useState("Live");
 
-  const refreshView = useCallback(async () => {
-    const query = new URLSearchParams({
-      competitionId: view.competitionId,
-      sessionId: view.sessionId,
-      divisionId: view.divisionId,
-    });
-    const response = await fetch(`/api/scrutineer/status?${query}`);
-    if (!response.ok) return;
-    const next = (await response.json()) as ScrutineerView;
-    setView(next);
-  }, [view.competitionId, view.sessionId, view.divisionId]);
+  const livePath = sessionLivePath(view.competitionId, view.sessionId);
+  const resultsPath = divisionResultsPath(view.competitionId, view.divisionId);
+  const { data: liveDoc } = useFirestoreDoc<SessionLiveDoc>(livePath);
+  const { data: resultsDoc } = useFirestoreDoc<{ view?: ScrutineerView }>(resultsPath);
 
   useEffect(() => {
     setView(initial);
     setSelectedScoreId(initial.scores[0]?.scoreId ?? "");
   }, [initial]);
 
-  useLiveSync({
-    refreshPage: false,
-    onEvent: () => {
-      setLiveLabel("Live");
-      void refreshView();
-    },
-  });
+  useEffect(() => {
+    if (!liveDoc?.heats) return;
+    setLiveLabel("Live");
+    setView((current) => ({
+      ...current,
+      heats: liveDoc.heats,
+      sessionComplete:
+        liveDoc.heats.length > 0 && liveDoc.heats.every((heat) => heat.complete),
+    }));
+  }, [liveDoc]);
 
   useEffect(() => {
+    if (!resultsDoc?.view) return;
     setLiveLabel("Live");
-    const timer = setInterval(() => {
-      void refreshView();
-    }, 30000);
-    return () => clearInterval(timer);
-  }, [refreshView]);
+    setView((current) => ({
+      ...resultsDoc.view!,
+      heats: current.heats,
+      sessionComplete: current.sessionComplete,
+    }));
+  }, [resultsDoc]);
 
   useEffect(() => {
     if (!selected) return;
@@ -83,6 +83,9 @@ export function ScrutineerBoard({ initial }: Props) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        competitionId: view.competitionId,
+        sessionId: view.sessionId,
+        divisionId: view.divisionId,
         scoreId: selected.scoreId,
         medal: scratched ? null : medal,
         placement:
@@ -97,14 +100,9 @@ export function ScrutineerBoard({ initial }: Props) {
       setError("Could not update score.");
       return;
     }
+    const body = (await response.json()) as { view?: ScrutineerView };
     setMessage("Score updated.");
-    const query = new URLSearchParams({
-      competitionId: view.competitionId,
-      sessionId: view.sessionId,
-      divisionId: view.divisionId,
-    });
-    const refresh = await fetch(`/api/scrutineer/status?${query}`);
-    if (refresh.ok) setView((await refresh.json()) as ScrutineerView);
+    if (body.view) setView(body.view);
   }
 
   async function downloadPacket() {

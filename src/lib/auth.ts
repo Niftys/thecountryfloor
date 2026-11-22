@@ -1,9 +1,9 @@
-import crypto from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/db";
+import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import type { Role } from "@/lib/store/types";
 
-export type Role = "ADMIN" | "JUDGE" | "SCRUTINEER";
+export type { Role };
 
 export type SessionUser = {
   id: string;
@@ -12,50 +12,41 @@ export type SessionUser = {
   displayName: string;
 };
 
-const COOKIE = "cf_session";
+export const COOKIE = "__session";
+const SESSION_DAYS = 5;
 
-function secret() {
-  return process.env.AUTH_SECRET || "countryfloor-dev-secret";
+export async function createSessionCookie(idToken: string) {
+  const expiresIn = SESSION_DAYS * 24 * 60 * 60 * 1000;
+  return adminAuth.createSessionCookie(idToken, { expiresIn });
 }
 
-export function signSession(user: SessionUser): string {
-  const body = Buffer.from(JSON.stringify(user)).toString("base64url");
-  const sig = crypto.createHmac("sha256", secret()).update(body).digest("base64url");
-  return `${body}.${sig}`;
-}
+export async function getSession(): Promise<SessionUser | null> {
+  const jar = await cookies();
+  const session = jar.get(COOKIE)?.value;
+  if (!session) return null;
 
-export function readSessionToken(token: string | undefined): SessionUser | null {
-  if (!token) return null;
-  const [body, sig] = token.split(".");
-  if (!body || !sig) return null;
-  const expected = crypto.createHmac("sha256", secret()).update(body).digest("base64url");
-  const actual = Buffer.from(sig);
-  const wanted = Buffer.from(expected);
-  if (actual.length !== wanted.length || !crypto.timingSafeEqual(actual, wanted)) return null;
   try {
-    const parsed = JSON.parse(Buffer.from(body, "base64url").toString()) as SessionUser;
-    if (!parsed.id || !parsed.role || !parsed.username) return null;
-    return parsed;
+    const decoded = await adminAuth.verifySessionCookie(session, true);
+    const role = (decoded.role as Role | undefined) ?? null;
+    const username = (decoded.username as string | undefined) ?? "";
+    const displayName = (decoded.displayName as string | undefined) ?? username;
+
+    if (role && username) {
+      return { id: decoded.uid, role, username, displayName };
+    }
+
+    const profile = await adminDb.collection("users").doc(decoded.uid).get();
+    if (!profile.exists) return null;
+    const data = profile.data() as { role: Role; username: string; displayName: string };
+    return {
+      id: decoded.uid,
+      role: data.role,
+      username: data.username,
+      displayName: data.displayName,
+    };
   } catch {
     return null;
   }
-}
-
-/** Cookie session, only if that user still exists (reseeds invalidate old ids). Does not modify cookies. */
-export async function getSession(): Promise<SessionUser | null> {
-  const jar = await cookies();
-  const parsed = readSessionToken(jar.get(COOKIE)?.value);
-  if (!parsed) return null;
-
-  const user = await prisma.user.findUnique({ where: { id: parsed.id } });
-  if (!user) return null;
-
-  return {
-    id: user.id,
-    role: user.role as Role,
-    username: user.username,
-    displayName: user.displayName,
-  };
 }
 
 export async function requireRole(roles: Role[]): Promise<SessionUser> {
@@ -65,4 +56,18 @@ export async function requireRole(roles: Role[]): Promise<SessionUser> {
   return user;
 }
 
-export { COOKIE };
+export async function setSessionCookie(value: string) {
+  const jar = await cookies();
+  jar.set(COOKIE, value, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: SESSION_DAYS * 24 * 60 * 60,
+  });
+}
+
+export async function clearSessionCookie() {
+  const jar = await cookies();
+  jar.set(COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+}
