@@ -1,0 +1,55 @@
+{
+  "format": "countryfloor.cdd.v1",
+  "competition": {
+    "cddId": "cdd-demo-001",
+    "name": "CDD Import Demo",
+    "dateLabel": "2026",
+    "location": "Import Hall",
+    "status": "Imported",
+    "active": false
+  },
+  "divisions": [
+    {
+      "cddId": "div-open",
+      "name": "Open Couples",
+      "scale": "COUPLES",
+      "rule9Count": 2,
+      "dances": [
+        { "name": "Waltz", "abbrev": "WLZ", "sortOrder": 3 },
+        { "name": "Two Step", "abbrev": "2ST", "sortOrder": 7 }
+      ],
+      "competitors": [
+        { "cddId": "c-901", "bib": 901, "name": "IMPORT ONE & PARTNER A" },
+        { "cddId": "c-902", "bib": 902, "name": "IMPORT TWO & PARTNER B" }
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "cddId": "sess-1",
+      "name": "Import Session",
+      "sortOrder": 1,
+      "judgeUsernames": ["d.appel", "k.linkous", "s.hansen", "c.graber", "r.champion"],
+      "heats": [
+        {
+          "cddId": "heat-1",
+          "number": 1,
+          "styleAbbrev": "WLZ",
+          "entries": [
+            { "bib": 901, "divisionName": "Open Couples" },
+            { "bib": 902, "divisionName": "Open Couples" }
+          ]
+        },
+        {
+          "cddId": "heat-2",
+          "number": 2,
+          "styleAbbrev": "2ST",
+          "entries": [
+            { "bib": 901, "divisionName": "Open Couples" },
+            { "bib": 902, "divisionName": "Open Couples" }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String           @id @default(cuid())
+  username     String           @unique
+  passwordHash String
+  role         String
+  displayName  String
+  scores       Score[]
+  submissions  HeatSubmission[]
+  sessions     SessionJudge[]
+  audits       ScoreAudit[]
+}
+
+model Competition {
+  id        String     @id @default(cuid())
+  name      String
+  dateLabel String
+  location  String
+  status    String
+  active    Boolean    @default(true)
+  cddId     String?
+  cddData   String?
+  sessions  Session[]
+  divisions Division[]
+}
+
+model Division {
+  id            String       @id @default(cuid())
+  competitionId String
+  competition   Competition  @relation(fields: [competitionId], references: [id])
+  name          String
+  scale         String
+  rule9Count    Int
+  cddId         String?
+  cddData       String?
+  dances        Dance[]
+  competitors   Competitor[]
+}
+
+model Dance {
+  id         String      @id @default(cuid())
+  divisionId String
+  division   Division    @relation(fields: [divisionId], references: [id])
+  name       String
+  abbrev     String
+  sortOrder  Int
+  entries    HeatEntry[]
+}
+
+model Competitor {
+  id         String      @id @default(cuid())
+  divisionId String
+  division   Division    @relation(fields: [divisionId], references: [id])
+  bib        Int
+  name       String
+  cddId      String?
+  cddData    String?
+  entries    HeatEntry[]
+}
+
+model Session {
+  id            String         @id @default(cuid())
+  competitionId String
+  competition   Competition    @relation(fields: [competitionId], references: [id])
+  name          String
+  sortOrder     Int
+  cddId         String?
+  cddData       String?
+  judges        SessionJudge[]
+  heats         Heat[]
+}
+
+model SessionJudge {
+  sessionId String
+  userId    String
+  sortOrder Int
+  session   Session @relation(fields: [sessionId], references: [id])
+  user      User    @relation(fields: [userId], references: [id])
+
+  @@id([sessionId, userId])
+}
+
+model Heat {
+  id          String           @id @default(cuid())
+  sessionId   String
+  session     Session          @relation(fields: [sessionId], references: [id])
+  number      Int
+  cddId       String?
+  cddData     String?
+  entries     HeatEntry[]
+  submissions HeatSubmission[]
+}
+
+model HeatEntry {
+  id           String     @id @default(cuid())
+  heatId       String
+  heat         Heat       @relation(fields: [heatId], references: [id])
+  competitorId String
+  competitor   Competitor @relation(fields: [competitorId], references: [id])
+  danceId      String
+  dance        Dance      @relation(fields: [danceId], references: [id])
+  scores       Score[]
+
+  @@unique([heatId, competitorId, danceId])
+}
+
+model Score {
+  id              String       @id @default(cuid())
+  heatEntryId     String
+  heatEntry       HeatEntry    @relation(fields: [heatEntryId], references: [id])
+  judgeId         String
+  judge           User         @relation(fields: [judgeId], references: [id])
+  medal           String?
+  placement       Int?
+  notes           String       @default("")
+  scratched       Boolean      @default(false)
+  overridden      Boolean      @default(false)
+  clientRequestId String?
+  audits          ScoreAudit[]
+
+  @@unique([heatEntryId, judgeId])
+  @@unique([clientRequestId])
+}
+
+model ScoreAudit {
+  id        String   @id @default(cuid())
+  scoreId   String
+  score     Score    @relation(fields: [scoreId], references: [id])
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id])
+  beforeJson String
+  afterJson  String
+  createdAt DateTime @default(now())
+}
+
+model HeatSubmission {
+  id              String   @id @default(cuid())
+  heatId          String
+  heat            Heat     @relation(fields: [heatId], references: [id])
+  judgeId         String
+  judge           User     @relation(fields: [judgeId], references: [id])
+  confirmedAt     DateTime
+  clientRequestId String?
+
+  @@unique([heatId, judgeId])
+  @@unique([clientRequestId])
+}
