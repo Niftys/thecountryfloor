@@ -32,7 +32,13 @@ export function ClientAuthGate({ children }: { children: React.ReactNode }) {
           throw new Error(body?.error ?? "Could not restore Firebase session.");
         }
         const body = (await response.json()) as { customToken: string };
-        await signInWithCustomToken(auth, body.customToken);
+        const credential = await signInWithCustomToken(auth, body.customToken);
+        // Force a fresh ID token so Firestore rules see role claims immediately.
+        await credential.user.getIdToken(true);
+        const token = await credential.user.getIdTokenResult(true);
+        if (!token.claims.role) {
+          throw new Error("Signed in, but role claim is missing for Firestore rules.");
+        }
         if (!cancelled) {
           setReady(true);
           setError(null);
