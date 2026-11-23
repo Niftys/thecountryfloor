@@ -1,6 +1,11 @@
 "use client";
 
-import { onAuthStateChanged, signInWithCustomToken, signOut } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signInWithCustomToken,
+  signOut,
+  type User,
+} from "firebase/auth";
 import { useEffect, useState } from "react";
 import { getClientAuth } from "@/lib/firebase/client";
 
@@ -15,12 +20,12 @@ export function ClientAuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    async function waitForAuthUser() {
+    async function waitForAuthUser(): Promise<User | null> {
       const auth = getClientAuth();
       if (auth.currentUser) return auth.currentUser;
       await auth.authStateReady();
       if (auth.currentUser) return auth.currentUser;
-      return new Promise<typeof auth.currentUser>((resolve) => {
+      return new Promise<User | null>((resolve) => {
         const unsub = onAuthStateChanged(auth, (user) => {
           unsub();
           resolve(user);
