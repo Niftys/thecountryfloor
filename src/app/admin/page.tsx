@@ -38,12 +38,19 @@ export default async function AdminPage({ searchParams }: Props) {
   const divisions = competition ? await listDivisions(competition.id) : [];
   const heats = competition && session ? await listHeats(competition.id, session.id) : [];
   const heatNotes = heatingWarnings(
-    heats.map((heat) => ({
-      number: heat.number,
-      divisionIds: [...new Set(heat.entries.map((entry) => entry.divisionName))],
-      size: new Set(heat.entries.map((entry) => entry.bib)).size,
-      styleAbbrev: heat.styleAbbrev,
-    })),
+    heats.map((heat) => {
+      const divisionSizes: Record<string, number> = {};
+      for (const entry of heat.entries) {
+        divisionSizes[entry.divisionName] = (divisionSizes[entry.divisionName] ?? 0) + 1;
+      }
+      return {
+        number: heat.number,
+        divisionIds: Object.keys(divisionSizes),
+        size: new Set(heat.entries.map((entry) => entry.bib)).size,
+        styleAbbrev: heat.styleAbbrev,
+        divisionSizes,
+      };
+    }),
   );
   const users = await listUsers();
   const judgeUsers = users

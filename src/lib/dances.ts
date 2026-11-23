@@ -36,30 +36,32 @@ export type HeatComposition = {
   number: number;
   /** Stable division ids (or names) on this heat. */
   divisionIds: string[];
-  /** Entrant count for balancing checks. */
+  /** Total entrants on the heat (fallback when divisionSizes missing). */
   size: number;
   /** Dance style for this heat — multi-heat rules apply per division *within* a style. */
   styleAbbrev?: string;
+  /** Couples from each division on this heat (preferred for split-balance checks). */
+  divisionSizes?: Record<string, number>;
 };
 
+function divisionCountOnHeat(heat: HeatComposition, divisionId: string): number {
+  if (heat.divisionSizes && divisionId in heat.divisionSizes) {
+    return heat.divisionSizes[divisionId]!;
+  }
+  const alone = heat.divisionIds.filter(Boolean);
+  if (alone.length === 1 && alone[0] === divisionId) return heat.size;
+  return heat.size;
+}
+
 /**
- * ACDA heating guidance as warnings (not hard blocks — co-mingling is allowed when needed).
- * - Prefer one division per heat
- * - When a division needs multiple heats for the *same dance*, those heats must be contiguous,
- *   sizes differ by ≤1, and the smaller heat runs first
+ * ACDA heating guidance (warnings, not hard blocks).
+ * Co-mingling small divisions to fill a heat is normal — not warned.
+ * When a division needs multiple heats for the *same dance*: contiguous,
+ * sizes differ by ≤1, smaller heat first.
  */
 export function heatingWarnings(heats: HeatComposition[]): string[] {
   const warnings: string[] = [];
   const sorted = [...heats].sort((a, b) => a.number - b.number);
-
-  for (const heat of sorted) {
-    const divisions = [...new Set(heat.divisionIds.filter(Boolean))];
-    if (divisions.length > 1) {
-      warnings.push(
-        `Heat ${heat.number} co-mingles ${divisions.length} divisions (allowed only when time requires).`,
-      );
-    }
-  }
 
   // Multi-heat rules only within the same division + same dance style.
   const byDivisionStyle = new Map<string, HeatComposition[]>();
@@ -76,6 +78,7 @@ export function heatingWarnings(heats: HeatComposition[]): string[] {
   for (const [key, groupHeats] of byDivisionStyle) {
     if (groupHeats.length < 2) continue;
     const [divisionId, style] = key.split("::");
+    if (!divisionId) continue;
     const styleLabel = style && style !== "_" ? ` ${style}` : "";
 
     const numbers = groupHeats.map((heat) => heat.number).sort((a, b) => a - b);
@@ -88,7 +91,11 @@ export function heatingWarnings(heats: HeatComposition[]): string[] {
       }
     }
 
-    const sizes = groupHeats.map((heat) => heat.size);
+    const sized = groupHeats.map((heat) => ({
+      number: heat.number,
+      size: divisionCountOnHeat(heat, divisionId),
+    }));
+    const sizes = sized.map((row) => row.size);
     const min = Math.min(...sizes);
     const max = Math.max(...sizes);
     if (max - min > 1) {
@@ -97,7 +104,7 @@ export function heatingWarnings(heats: HeatComposition[]): string[] {
       );
     }
 
-    const ordered = [...groupHeats].sort((a, b) => a.number - b.number);
+    const ordered = [...sized].sort((a, b) => a.number - b.number);
     for (let i = 1; i < ordered.length; i++) {
       if (ordered[i]!.size < ordered[i - 1]!.size) {
         warnings.push(

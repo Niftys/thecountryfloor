@@ -90,11 +90,18 @@ export function parseCddPayload(
       if (!heat.styleAbbrev) return { ok: false, error: `Heat ${heat.number} needs styleAbbrev.` };
       const conflict = heatStyleConflict([heat.styleAbbrev]);
       if (conflict) return { ok: false, error: conflict };
+      const divisionSizes: Record<string, number> = {};
+      for (const entry of heat.entries ?? []) {
+        const name = entry.divisionName;
+        if (!name) continue;
+        divisionSizes[name] = (divisionSizes[name] ?? 0) + 1;
+      }
       compositions.push({
         number: heat.number,
-        divisionIds: [...new Set((heat.entries ?? []).map((entry) => entry.divisionName))],
+        divisionIds: Object.keys(divisionSizes),
         size: (heat.entries ?? []).length,
         styleAbbrev: heat.styleAbbrev,
+        divisionSizes,
       });
     }
   }
