@@ -439,6 +439,7 @@ export function JudgeBoard({
               label="Heat"
               value={heat.number}
               onChange={(event) => requestHeatChange(Number(event.target.value))}
+              MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
             >
               {heats.map((item) => {
                 const style = item.groups[0]?.danceName ?? "—";

@@ -38,12 +38,15 @@ export type HeatComposition = {
   divisionIds: string[];
   /** Entrant count for balancing checks. */
   size: number;
+  /** Dance style for this heat — multi-heat rules apply per division *within* a style. */
+  styleAbbrev?: string;
 };
 
 /**
  * ACDA heating guidance as warnings (not hard blocks — co-mingling is allowed when needed).
  * - Prefer one division per heat
- * - Multi-heat divisions: contiguous, sizes differ by ≤1, smaller heat first when sizes differ
+ * - When a division needs multiple heats for the *same dance*, those heats must be contiguous,
+ *   sizes differ by ≤1, and the smaller heat runs first
  */
 export function heatingWarnings(heats: HeatComposition[]): string[] {
   const warnings: string[] = [];
@@ -58,41 +61,47 @@ export function heatingWarnings(heats: HeatComposition[]): string[] {
     }
   }
 
-  const byDivision = new Map<string, HeatComposition[]>();
+  // Multi-heat rules only within the same division + same dance style.
+  const byDivisionStyle = new Map<string, HeatComposition[]>();
   for (const heat of sorted) {
+    const style = heat.styleAbbrev?.trim() || "_";
     for (const divisionId of new Set(heat.divisionIds.filter(Boolean))) {
-      const list = byDivision.get(divisionId) ?? [];
+      const key = `${divisionId}::${style}`;
+      const list = byDivisionStyle.get(key) ?? [];
       list.push(heat);
-      byDivision.set(divisionId, list);
+      byDivisionStyle.set(key, list);
     }
   }
 
-  for (const [divisionId, divisionHeats] of byDivision) {
-    if (divisionHeats.length < 2) continue;
-    const numbers = divisionHeats.map((heat) => heat.number).sort((a, b) => a - b);
+  for (const [key, groupHeats] of byDivisionStyle) {
+    if (groupHeats.length < 2) continue;
+    const [divisionId, style] = key.split("::");
+    const styleLabel = style && style !== "_" ? ` ${style}` : "";
+
+    const numbers = groupHeats.map((heat) => heat.number).sort((a, b) => a - b);
     for (let i = 1; i < numbers.length; i++) {
-      if (numbers[i] !== numbers[i - 1] + 1) {
+      if (numbers[i] !== numbers[i - 1]! + 1) {
         warnings.push(
-          `Division ${divisionId}: multi-heat rounds should be contiguous (found heats ${numbers.join(", ")}).`,
+          `Division ${divisionId}${styleLabel}: multi-heat rounds should be contiguous (found heats ${numbers.join(", ")}).`,
         );
         break;
       }
     }
 
-    const sizes = divisionHeats.map((heat) => heat.size);
+    const sizes = groupHeats.map((heat) => heat.size);
     const min = Math.min(...sizes);
     const max = Math.max(...sizes);
     if (max - min > 1) {
       warnings.push(
-        `Division ${divisionId}: heat sizes differ by more than 1 (${sizes.join(", ")}).`,
+        `Division ${divisionId}${styleLabel}: heat sizes differ by more than 1 (${sizes.join(", ")}).`,
       );
     }
 
-    const ordered = [...divisionHeats].sort((a, b) => a.number - b.number);
+    const ordered = [...groupHeats].sort((a, b) => a.number - b.number);
     for (let i = 1; i < ordered.length; i++) {
-      if (ordered[i].size < ordered[i - 1].size) {
+      if (ordered[i]!.size < ordered[i - 1]!.size) {
         warnings.push(
-          `Division ${divisionId}: when sizes differ, the smaller heat should run first (heat ${ordered[i - 1].number} has ${ordered[i - 1].size}, heat ${ordered[i].number} has ${ordered[i].size}).`,
+          `Division ${divisionId}${styleLabel}: when sizes differ, the smaller heat should run first (heat ${ordered[i - 1]!.number} has ${ordered[i - 1]!.size}, heat ${ordered[i]!.number} has ${ordered[i]!.size}).`,
         );
         break;
       }

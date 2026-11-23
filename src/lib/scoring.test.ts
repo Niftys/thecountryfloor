@@ -204,13 +204,21 @@ test("Rule 6 breaks Rules 1–5 ties by loss%; identical loss% shares average pl
   assert.equal(rule9Total([2.5, 1], 2), 3.5);
 });
 
-test("heatingWarnings flags non-contiguous multi-heats and oversized imbalance", () => {
+test("heatingWarnings flags non-contiguous multi-heats only within the same dance", () => {
   const notes = heatingWarnings([
-    { number: 1, divisionIds: ["Open"], size: 4 },
-    { number: 3, divisionIds: ["Open"], size: 2 },
+    { number: 1, divisionIds: ["Open"], size: 4, styleAbbrev: "WLZ" },
+    { number: 3, divisionIds: ["Open"], size: 2, styleAbbrev: "WLZ" },
   ]);
   assert.ok(notes.some((note) => note.includes("contiguous")));
   assert.ok(notes.some((note) => note.includes("more than 1")));
+
+  // Same division across different dances is normal floor order — not a multi-heat round.
+  const acrossDances = heatingWarnings([
+    { number: 1, divisionIds: ["Open"], size: 4, styleAbbrev: "TR2" },
+    { number: 52, divisionIds: ["Open"], size: 4, styleAbbrev: "WLZ" },
+    { number: 103, divisionIds: ["Open"], size: 4, styleAbbrev: "2ST" },
+  ]);
+  assert.equal(acrossDances.length, 0);
 });
 
 test("medalBandPlacements auto-fills uniques and clears ties with skipped places", () => {

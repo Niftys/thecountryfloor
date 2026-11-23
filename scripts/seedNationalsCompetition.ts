@@ -9,6 +9,7 @@ import {
   SESSION_META,
   coupleName,
   fakeMarks,
+  heatCoupleCount,
   planSessionHeats,
   type SessionKey,
 } from "../src/lib/seed/acdaNationalsPlan";
@@ -65,12 +66,11 @@ export async function seedAcdaNationalsCompetition(judgeIds: string[]) {
     }));
     const competitors = Array.from({ length: plan.coupleCount }, (_, i) => {
       const id = `${divisionId}_c_${i}`;
-      const row = {
+      return {
         id,
         bib: bib++,
         name: coupleName(plan.ageRank * 1000 + i * 17 + plan.name.length),
       };
-      return row;
     });
     const doc: DivisionDoc = {
       name: plan.name,
@@ -97,37 +97,54 @@ export async function seedAcdaNationalsCompetition(judgeIds: string[]) {
     const writeOps: Array<(batch: WriteBatch) => void> = [];
 
     for (const heat of planned) {
-      const div = divisionByName.get(heat.divisionName);
-      if (!div) continue;
-      const dance = div.doc.dances.find((d) => d.abbrev === heat.styleAbbrev);
-      if (!dance) continue;
+      const entries: HeatEntryEmbedded[] = [];
+      const divisionIds = new Set<string>();
 
-      const heatId = adminDb.collection("x").doc().id;
-      const entries: HeatEntryEmbedded[] = heat.coupleIndexes.map((idx) => {
-        const couple = div.doc.competitors[idx]!;
-        return {
-          id: `${heatId}_${couple.id}_${dance.id}`,
-          competitorId: couple.id,
-          bib: couple.bib,
-          name: couple.name,
-          divisionId: div.id,
-          divisionName: div.doc.name,
-          scale: div.doc.scale,
-          danceId: dance.id,
-          danceName: dance.name,
-          danceAbbrev: dance.abbrev,
-        };
-      });
+      for (const slot of heat.slots) {
+        const div = divisionByName.get(slot.divisionName);
+        if (!div) continue;
+        const dance = div.doc.dances.find((d) => d.abbrev === heat.styleAbbrev);
+        if (!dance) continue;
+        divisionIds.add(div.id);
 
+        for (const idx of slot.coupleIndexes) {
+          const couple = div.doc.competitors[idx];
+          if (!couple) continue;
+          const heatIdPlaceholder = "HEAT";
+          entries.push({
+            id: `${heatIdPlaceholder}_${couple.id}_${dance.id}`,
+            competitorId: couple.id,
+            bib: couple.bib,
+            name: couple.name,
+            divisionId: div.id,
+            divisionName: div.doc.name,
+            scale: div.doc.scale,
+            danceId: dance.id,
+            danceName: dance.name,
+            danceAbbrev: dance.abbrev,
+          });
+        }
+      }
+
+      if (entries.length === 0) continue;
       if (entries.length > MAX_HEAT_SIZE) {
         throw new Error(`Heat ${heat.number} has ${entries.length} > ${MAX_HEAT_SIZE}`);
       }
+      if (heatCoupleCount(heat) !== entries.length) {
+        throw new Error(`Heat ${heat.number} slot/entry mismatch`);
+      }
+
+      const heatId = adminDb.collection("x").doc().id;
+      const finalized = entries.map((entry) => ({
+        ...entry,
+        id: entry.id.replace("HEAT", heatId),
+      }));
 
       const heatDoc: HeatDoc = {
         number: heat.number,
         styleAbbrev: heat.styleAbbrev,
         styleName: danceName(heat.styleAbbrev),
-        entries,
+        entries: finalized,
         confirmedJudgeIds: [...judgeIds],
         confirmCount: judgeIds.length,
         cddId: `nationals:${sessionKey}:h${heat.number}`,
@@ -139,20 +156,28 @@ export async function seedAcdaNationalsCompetition(judgeIds: string[]) {
 
       for (const [judgeIndex, judgeId] of judgeIds.entries()) {
         const sheetMarks: JudgeSheetDoc["marks"] = {};
-        entries.forEach((entry, placeAmong) => {
-          const marks = fakeMarks(heat.scale, placeAmong + 1, entries.length, judgeIds.length);
+        let couplesPlace = 0;
+        finalized.forEach((entry, index) => {
+          const marks = fakeMarks(entry.scale, index + 1, finalized.length, judgeIds.length);
           const mark = marks[judgeIndex]!;
-          // Ensure Couples places unique per judge within heat
-          sheetMarks[entry.id] = {
-            medal: mark.medal,
-            placement:
-              heat.scale === "COUPLES"
-                ? placeAmong + 1 // stable unique places; majority still works
-                : null,
-            notes: "",
-            scratched: false,
-            overridden: false,
-          };
+          if (entry.scale === "COUPLES") {
+            couplesPlace += 1;
+            sheetMarks[entry.id] = {
+              medal: mark.medal,
+              placement: couplesPlace,
+              notes: "",
+              scratched: false,
+              overridden: false,
+            };
+          } else {
+            sheetMarks[entry.id] = {
+              medal: mark.medal,
+              placement: null,
+              notes: "",
+              scratched: false,
+              overridden: false,
+            };
+          }
         });
         writeOps.push((batch) => {
           batch.set(adminDb.doc(judgeSheetPath(competitionId, sessionId, heatId, judgeId)), {
@@ -167,7 +192,7 @@ export async function seedAcdaNationalsCompetition(judgeIds: string[]) {
         number: heat.number,
         styleAbbrev: heat.styleAbbrev,
         styleName: danceName(heat.styleAbbrev),
-        divisionIds: [div.id],
+        divisionIds: [...divisionIds],
       });
     }
 

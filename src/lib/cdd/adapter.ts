@@ -94,6 +94,7 @@ export function parseCddPayload(
         number: heat.number,
         divisionIds: [...new Set((heat.entries ?? []).map((entry) => entry.divisionName))],
         size: (heat.entries ?? []).length,
+        styleAbbrev: heat.styleAbbrev,
       });
     }
   }

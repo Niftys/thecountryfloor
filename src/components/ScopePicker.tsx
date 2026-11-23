@@ -19,6 +19,8 @@ type Props = {
   divisionId?: string;
 };
 
+const MENU_PROPS = { PaperProps: { sx: { maxHeight: 360 } } };
+
 export function ScopePicker({
   competitions,
   sessions = [],
@@ -53,6 +55,7 @@ export function ScopePicker({
             labelId="competition-select"
             label="Competition"
             value={competitionId}
+            MenuProps={MENU_PROPS}
             onChange={(event) =>
               go({
                 competitionId: event.target.value,
@@ -76,6 +79,7 @@ export function ScopePicker({
               labelId="session-select"
               label="Session"
               value={sessionId}
+              MenuProps={MENU_PROPS}
               onChange={(event) => go({ sessionId: event.target.value })}
             >
               {sessions.map((item) => (
@@ -94,6 +98,7 @@ export function ScopePicker({
               labelId="division-select"
               label="Division"
               value={divisionId}
+              MenuProps={MENU_PROPS}
               onChange={(event) => go({ divisionId: event.target.value })}
             >
               {divisions.map((item) => (

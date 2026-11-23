@@ -72,12 +72,17 @@ async function ensureUser(input: {
   }
 }
 
+function allowLiveSeed(): boolean {
+  const raw = (process.env.ALLOW_LIVE_SEED ?? "").trim().toLowerCase();
+  return raw === "true" || raw === "1" || raw === "yes";
+}
+
 async function main() {
   const usingEmulator = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
-  if (!usingEmulator && process.env.ALLOW_LIVE_SEED !== "true") {
+  if (!usingEmulator && !allowLiveSeed()) {
     console.error(
       "Refusing to seed the live Firebase project.\n" +
-        "Use emulators, or set ALLOW_LIVE_SEED=true with GOOGLE_APPLICATION_CREDENTIALS.",
+        "Use emulators, or set ALLOW_LIVE_SEED=true (or 1) with GOOGLE_APPLICATION_CREDENTIALS.",
     );
     process.exit(1);
   }

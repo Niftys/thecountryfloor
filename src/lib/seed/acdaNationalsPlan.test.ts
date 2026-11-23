@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   MAX_HEAT_SIZE,
+  SATURDAY_HEAT_TARGET,
+  SOLO_MIN,
+  heatCoupleCount,
   heatSizes,
   planSessionHeats,
 } from "./acdaNationalsPlan";
@@ -14,17 +17,28 @@ test("heatSizes keeps chunks ≤8, differ by ≤1, smaller first", () => {
   assert.ok(heatSizes(25).every((n) => n <= MAX_HEAT_SIZE));
 });
 
-test("Saturday Main Floor plans at least 100 heats; age order within a dance", () => {
+test("Saturday Main Floor ~150 heats; co-mingled fills; age order within a dance", () => {
   const saturday = planSessionHeats("saturday");
-  assert.ok(saturday.length >= 100, `expected ≥100 heats, got ${saturday.length}`);
-  assert.ok(saturday.every((h) => h.coupleIndexes.length <= MAX_HEAT_SIZE));
+  assert.ok(
+    saturday.length >= 100 && saturday.length <= SATURDAY_HEAT_TARGET + 30,
+    `expected ~${SATURDAY_HEAT_TARGET} heats (±30), got ${saturday.length}`,
+  );
+  assert.ok(saturday.every((h) => heatCoupleCount(h) <= MAX_HEAT_SIZE));
+  assert.ok(saturday.every((h) => h.slots.length >= 1));
+
+  const mixed = saturday.filter((h) => h.slots.length > 1);
+  assert.ok(mixed.length > 0, "expected some co-mingled heats");
+
+  const soloSized = saturday.filter(
+    (h) => h.slots.length === 1 && h.slots[0]!.coupleIndexes.length >= SOLO_MIN,
+  );
+  assert.ok(soloSized.length > 0, "expected some solo division heats");
 
   const waltz = saturday.filter((h) => h.styleAbbrev === "WLZ");
   for (let i = 1; i < waltz.length; i++) {
-    assert.ok(
-      waltz[i]!.ageRank <= waltz[i - 1]!.ageRank,
-      "Waltz heats must run oldest age divisions first",
-    );
+    const prev = Math.max(...waltz[i - 1]!.slots.map((s) => s.ageRank));
+    const curr = Math.max(...waltz[i]!.slots.map((s) => s.ageRank));
+    assert.ok(curr <= prev, "Waltz heats must run oldest age divisions first");
   }
 
   const sundayAm = planSessionHeats("sundayAm");

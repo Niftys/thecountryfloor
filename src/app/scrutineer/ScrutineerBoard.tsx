@@ -19,7 +19,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useFirestoreDoc } from "@/hooks/useFirestoreDoc";
 import type { DanceSheetCell, ScoreChoice, ScrutineerView } from "@/lib/results";
 import { COUPLES_SCALE, PROAM_SCALE, formatDancePlace, requiresPlacement } from "@/lib/scoring";
@@ -33,6 +33,28 @@ type EditTarget = {
   danceAbbrev: string;
 };
 
+function PenIcon() {
+  return (
+    <Box
+      component="span"
+      className="cell-pen"
+      aria-hidden
+      sx={{
+        display: "inline-flex",
+        ml: 0.5,
+        opacity: 0,
+        verticalAlign: "middle",
+        transition: "opacity 0.15s ease",
+        color: "primary.main",
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm14.71-9.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+      </svg>
+    </Box>
+  );
+}
+
 export function ScrutineerBoard({ initial }: Props) {
   const [view, setView] = useState(initial);
   const [edit, setEdit] = useState<EditTarget | null>(null);
@@ -44,6 +66,8 @@ export function ScrutineerBoard({ initial }: Props) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [liveLabel, setLiveLabel] = useState("Live");
+  const [danceFilter, setDanceFilter] = useState(initial.dances[0]?.abbrev ?? "");
+  const [auditQuery, setAuditQuery] = useState("");
 
   const livePath = sessionLivePath(view.competitionId, view.sessionId);
   const resultsPath = divisionResultsPath(view.competitionId, view.divisionId);
@@ -54,6 +78,11 @@ export function ScrutineerBoard({ initial }: Props) {
 
   useEffect(() => {
     setView(initial);
+    setDanceFilter((current) =>
+      initial.dances.some((d) => d.abbrev === current)
+        ? current
+        : (initial.dances[0]?.abbrev ?? ""),
+    );
   }, [initial]);
 
   useEffect(() => {
@@ -197,6 +226,21 @@ export function ScrutineerBoard({ initial }: Props) {
 
   const medals = edit?.score.scale === "PROAM" ? PROAM_SCALE : COUPLES_SCALE;
   const listenerError = liveError || resultsError;
+  const activeDance = view.dances.find((d) => d.abbrev === danceFilter) ?? view.dances[0] ?? null;
+
+  const filteredAudits = useMemo(() => {
+    const q = auditQuery.trim().toLowerCase();
+    if (!q) return view.audits;
+    return view.audits.filter(
+      (audit) =>
+        audit.actor.toLowerCase().includes(q) ||
+        String(audit.bib).includes(q) ||
+        audit.dance.toLowerCase().includes(q) ||
+        audit.judge.toLowerCase().includes(q) ||
+        audit.before.toLowerCase().includes(q) ||
+        audit.after.toLowerCase().includes(q),
+    );
+  }, [auditQuery, view.audits]);
 
   return (
     <Stack spacing={3}>
@@ -209,8 +253,8 @@ export function ScrutineerBoard({ initial }: Props) {
             {view.sessionName} · {view.divisionName}
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            Tap any red or judge mark on a dance sheet to change it. You can always restore the
-            judge’s original mark.
+            Hover a judge mark and click the pen to edit. You can always restore the judge’s original
+            mark.
           </Typography>
         </Box>
         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
@@ -255,18 +299,27 @@ export function ScrutineerBoard({ initial }: Props) {
             Judge progress
           </Typography>
           <Typography color="text.secondary" sx={{ mb: 1.5 }}>
-            Green = all judges submitted. Orange = still waiting.
+            Green = all judges submitted. Orange = still waiting. Scroll for later heats.
           </Typography>
-          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+          <Box
+            sx={{
+              maxHeight: 112,
+              overflow: "auto",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 1,
+              pr: 0.5,
+            }}
+          >
             {view.heats.map((heat) => (
               <Chip
                 key={heat.id}
-                label={`Heat ${heat.number} · ${heat.label} · ${heat.confirmed} of ${heat.judges} judges`}
+                label={`H${heat.number} · ${heat.label} · ${heat.confirmed}/${heat.judges}`}
                 color={heat.complete ? "success" : "warning"}
-                sx={{ fontSize: "1.05rem", height: 48, px: 0.5 }}
+                sx={{ fontSize: "0.95rem", height: 40 }}
               />
             ))}
-          </Stack>
+          </Box>
         </CardContent>
       </Card>
 
@@ -278,13 +331,15 @@ export function ScrutineerBoard({ initial }: Props) {
           {view.alerts.length === 0 ? (
             <Alert severity="success">Nothing unusual right now.</Alert>
           ) : (
-            <Stack spacing={1}>
-              {view.alerts.map((alert) => (
-                <Alert key={alert.id} severity="warning">
-                  {alert.text}
-                </Alert>
-              ))}
-            </Stack>
+            <Box sx={{ maxHeight: 200, overflow: "auto" }}>
+              <Stack spacing={1}>
+                {view.alerts.map((alert) => (
+                  <Alert key={alert.id} severity="warning">
+                    {alert.text}
+                  </Alert>
+                ))}
+              </Stack>
+            </Box>
           )}
         </CardContent>
       </Card>
@@ -297,8 +352,15 @@ export function ScrutineerBoard({ initial }: Props) {
           <Typography color="text.secondary" sx={{ mb: 1.5 }}>
             Pink / red highlight means a scrutineer changed at least one mark for that dance.
           </Typography>
-          <Box sx={{ overflowX: "auto" }}>
-            <Table size="small">
+          <Box
+            sx={{
+              maxHeight: 360,
+              overflow: "auto",
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
                   <TableCell>Comp #</TableCell>
@@ -334,7 +396,11 @@ export function ScrutineerBoard({ initial }: Props) {
                     ))}
                     <TableCell
                       align="right"
-                      sx={row.overridden ? { color: "error.main", fontWeight: 800, bgcolor: "#ffebee" } : undefined}
+                      sx={
+                        row.overridden
+                          ? { color: "error.main", fontWeight: 800, bgcolor: "#ffebee" }
+                          : undefined
+                      }
                     >
                       {row.rule9Total.toFixed(1)}
                     </TableCell>
@@ -342,7 +408,11 @@ export function ScrutineerBoard({ initial }: Props) {
                     <TableCell align="right">{row.rule11Place}</TableCell>
                     <TableCell
                       align="right"
-                      sx={row.overridden ? { color: "error.main", fontWeight: 800, bgcolor: "#ffebee" } : undefined}
+                      sx={
+                        row.overridden
+                          ? { color: "error.main", fontWeight: 800, bgcolor: "#ffebee" }
+                          : undefined
+                      }
                     >
                       {row.place}
                     </TableCell>
@@ -354,23 +424,51 @@ export function ScrutineerBoard({ initial }: Props) {
         </CardContent>
       </Card>
 
-      {view.dances.map((dance) => (
-        <Card key={dance.abbrev}>
-          <CardContent>
-            <Typography variant="h5" gutterBottom>
-              {dance.name}
-            </Typography>
-            <Typography color="text.secondary" sx={{ mb: 1.5 }}>
-              Tap a judge’s medal/place cell to edit. Use <strong>Restore judge mark</strong> if you
-              need to undo.
-            </Typography>
-            <Box sx={{ overflowX: "auto" }}>
-              <Table size="medium">
+      <Card>
+        <CardContent>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            justifyContent="space-between"
+            spacing={1.5}
+            sx={{ mb: 1.5 }}
+          >
+            <Box>
+              <Typography variant="h5">Dance sheets</Typography>
+              <Typography color="text.secondary">
+                Hover a cell for the pen, then click to edit.
+              </Typography>
+            </Box>
+            <TextField
+              select
+              size="small"
+              label="Dance"
+              value={activeDance?.abbrev ?? ""}
+              onChange={(e) => setDanceFilter(e.target.value)}
+              sx={{ minWidth: 200 }}
+              SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 320 } } } }}
+            >
+              {view.dances.map((dance) => (
+                <MenuItem key={dance.abbrev} value={dance.abbrev}>
+                  {dance.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+          {activeDance ? (
+            <Box
+              sx={{
+                maxHeight: 420,
+                overflow: "auto",
+                border: "1px solid",
+                borderColor: "divider",
+              }}
+            >
+              <Table size="medium" stickyHeader>
                 <TableHead>
                   <TableRow>
                     <TableCell>Comp #</TableCell>
                     <TableCell>Couple</TableCell>
-                    {dance.judges.map((judge) => (
+                    {activeDance.judges.map((judge) => (
                       <TableCell key={judge} align="center">
                         {judge}
                       </TableCell>
@@ -386,47 +484,54 @@ export function ScrutineerBoard({ initial }: Props) {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {dance.rows.map((row) => (
-                    <TableRow key={`${dance.abbrev}-${row.bib}`}>
+                  {activeDance.rows.map((row) => (
+                    <TableRow key={`${activeDance.abbrev}-${row.bib}`}>
                       <TableCell>{row.bib}</TableCell>
                       <TableCell>{row.name}</TableCell>
-                      {dance.judges.map((judge) => {
+                      {activeDance.judges.map((judge) => {
                         const cell = row.cells.find((item) => item.judge === judge) ?? null;
                         return (
                           <TableCell
                             key={judge}
                             align="center"
                             onClick={() => {
-                              if (cell) openCell(cell.scoreId, dance.abbrev, cell);
+                              if (cell) openCell(cell.scoreId, activeDance.abbrev, cell);
                             }}
                             sx={{
                               cursor: cell ? "pointer" : "default",
                               minWidth: 88,
-                              minHeight: 72,
-                              py: 1.5,
+                              minHeight: 64,
+                              py: 1.25,
                               ...(cell?.overridden
                                 ? { color: "error.main", fontWeight: 800, bgcolor: "#ffebee" }
                                 : cell
                                   ? {
                                       bgcolor: "#f7fafc",
-                                      "&:hover": { bgcolor: "#e3f2fd", outline: "2px solid #1565c0" },
+                                      "&:hover": {
+                                        bgcolor: "#e3f2fd",
+                                        outline: "2px solid #1565c0",
+                                        "& .cell-pen": { opacity: 1 },
+                                      },
                                     }
                                   : undefined),
                             }}
                           >
                             {cell ? (
                               <Box>
-                                <Typography fontWeight={800} fontSize="1.2rem" color="inherit">
+                                <Typography
+                                  fontWeight={800}
+                                  fontSize="1.15rem"
+                                  color="inherit"
+                                  component="span"
+                                >
                                   {cell.scratched ? "SCRATCH" : cell.medal || "—"}
+                                  <PenIcon />
                                 </Typography>
                                 {!cell.scratched && cell.placement != null ? (
                                   <Typography fontWeight={700} color="inherit">
                                     Place {cell.placement}
                                   </Typography>
                                 ) : null}
-                                <Typography variant="caption" color="text.secondary" display="block">
-                                  Tap to edit
-                                </Typography>
                               </Box>
                             ) : (
                               "—"
@@ -447,20 +552,43 @@ export function ScrutineerBoard({ initial }: Props) {
                 </TableBody>
               </Table>
             </Box>
-          </CardContent>
-        </Card>
-      ))}
+          ) : (
+            <Typography color="text.secondary">No dance sheets for this division.</Typography>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent>
-          <Typography variant="h5" gutterBottom>
-            Change history
-          </Typography>
-          <Typography color="text.secondary" sx={{ mb: 1.5 }}>
-            Every scrutineer edit is listed here, including restores back to the judge’s mark.
-          </Typography>
-          <Box sx={{ overflowX: "auto" }}>
-            <Table size="small">
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            justifyContent="space-between"
+            spacing={1.5}
+            sx={{ mb: 1.5 }}
+          >
+            <Box>
+              <Typography variant="h5">Change history</Typography>
+              <Typography color="text.secondary">
+                Every scrutineer edit, including restores.
+              </Typography>
+            </Box>
+            <TextField
+              size="small"
+              label="Filter history"
+              value={auditQuery}
+              onChange={(e) => setAuditQuery(e.target.value)}
+              sx={{ minWidth: 220 }}
+            />
+          </Stack>
+          <Box
+            sx={{
+              maxHeight: 280,
+              overflow: "auto",
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
                   <TableCell>When</TableCell>
@@ -473,7 +601,7 @@ export function ScrutineerBoard({ initial }: Props) {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {view.audits.map((audit) => (
+                {filteredAudits.map((audit) => (
                   <TableRow key={audit.id}>
                     <TableCell>{new Date(audit.at).toLocaleString()}</TableCell>
                     <TableCell>{audit.actor}</TableCell>
@@ -484,6 +612,11 @@ export function ScrutineerBoard({ initial }: Props) {
                     <TableCell>{audit.after}</TableCell>
                   </TableRow>
                 ))}
+                {filteredAudits.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7}>No matching changes</TableCell>
+                  </TableRow>
+                ) : null}
               </TableBody>
             </Table>
           </Box>

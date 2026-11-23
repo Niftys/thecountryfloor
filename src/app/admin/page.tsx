@@ -1,13 +1,9 @@
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { Suspense } from "react";
 import { AppShell } from "@/components/AppShell";
@@ -21,6 +17,7 @@ import {
   listSessions,
 } from "@/lib/store/competitions";
 import { listUsers } from "@/lib/store/users";
+import { AdminBrowsePanels } from "./AdminBrowsePanels";
 import { CompetitionActiveToggle } from "./CompetitionActiveToggle";
 import { CompetitionOps } from "./CompetitionOps";
 import { SessionJudgesEditor } from "./SessionJudgesEditor";
@@ -45,6 +42,7 @@ export default async function AdminPage({ searchParams }: Props) {
       number: heat.number,
       divisionIds: [...new Set(heat.entries.map((entry) => entry.divisionName))],
       size: new Set(heat.entries.map((entry) => entry.bib)).size,
+      styleAbbrev: heat.styleAbbrev,
     })),
   );
   const users = await listUsers();
@@ -109,17 +107,29 @@ export default async function AdminPage({ searchParams }: Props) {
                   competitionId={competition.id}
                   active={competition.active}
                 />
-                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mb: 1 }}>
+                  <Chip label={`${sessions.length} sessions`} />
+                  <Chip label={`${heats.length} heats in selected session`} />
+                  <Chip label={`${divisions.length} divisions`} />
+                </Stack>
+                <Box
+                  sx={{
+                    maxHeight: 88,
+                    overflow: "auto",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 1,
+                  }}
+                >
                   {divisions.map((division) => (
                     <Chip
                       key={division.id}
+                      size="small"
                       label={`${division.name} · ${division.scale} · Rule9 ${division.rule9Count}`}
                       color="primary"
                     />
                   ))}
-                  <Chip label={`${sessions.length} sessions`} />
-                  <Chip label={`${heats.length} heats in selected session`} />
-                </Stack>
+                </Box>
               </Stack>
             ) : (
               <Typography>No competition loaded. Run the seed.</Typography>
@@ -165,72 +175,22 @@ export default async function AdminPage({ searchParams }: Props) {
           </Card>
         ) : null}
 
-        {divisions.map((division) => (
-          <Card key={division.id}>
-            <CardContent>
-              <Typography variant="h5" gutterBottom>
-                Competitors · {division.name}
-              </Typography>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Bib</TableCell>
-                    <TableCell>Couple</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {division.competitors.map((couple) => (
-                    <TableRow key={couple.id}>
-                      <TableCell>{couple.bib}</TableCell>
-                      <TableCell>{couple.name}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        ))}
-
-        <Card>
-          <CardContent>
-            <Typography variant="h5" gutterBottom>
-              Session · {session?.name ?? "—"}
-            </Typography>
-            {heatNotes.length > 0 ? (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                {heatNotes.join(" ")}
-              </Alert>
-            ) : null}
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Heat</TableCell>
-                  <TableCell>Style</TableCell>
-                  <TableCell>Divisions</TableCell>
-                  <TableCell>Couples</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {heats.map((heat) => {
-                  const divisionsLabel = [
-                    ...new Set(heat.entries.map((entry) => entry.divisionName)),
-                  ].join(" + ");
-                  const couples = [...new Set(heat.entries.map((entry) => String(entry.bib)))].join(
-                    ", ",
-                  );
-                  return (
-                    <TableRow key={heat.id}>
-                      <TableCell>{heat.number}</TableCell>
-                      <TableCell>{heat.styleName}</TableCell>
-                      <TableCell>{divisionsLabel || "—"}</TableCell>
-                      <TableCell>{couples}</TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <AdminBrowsePanels
+          divisions={divisions.map((d) => ({
+            id: d.id,
+            name: d.name,
+            competitors: d.competitors,
+          }))}
+          heats={heats.map((h) => ({
+            id: h.id,
+            number: h.number,
+            styleName: h.styleName,
+            styleAbbrev: h.styleAbbrev,
+            entries: h.entries.map((e) => ({ bib: e.bib, divisionName: e.divisionName })),
+          }))}
+          sessionName={session?.name ?? null}
+          heatNotes={heatNotes}
+        />
       </Stack>
     </AppShell>
   );
