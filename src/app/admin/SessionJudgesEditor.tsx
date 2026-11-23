@@ -7,7 +7,7 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type JudgeOption = { id: string; label: string };
 
@@ -31,6 +31,12 @@ export function SessionJudgesEditor({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setSelected(assignedIds);
+    setMessage("");
+    setError("");
+  }, [sessionId, assignedIds]);
 
   async function save() {
     setBusy(true);

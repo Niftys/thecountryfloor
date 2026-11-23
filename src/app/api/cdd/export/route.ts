@@ -16,7 +16,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Missing scope" }, { status: 400 });
   }
 
-  const view = await loadScrutineerView({ competitionId, sessionId, divisionId });
-  if (!view) return NextResponse.json({ error: "No session" }, { status: 404 });
+  const view = await loadScrutineerView({
+    competitionId,
+    sessionId,
+    divisionId,
+    forceRebuild: true,
+  });
+  if (!view?.packet) return NextResponse.json({ error: "No session" }, { status: 404 });
   return NextResponse.json(view.packet);
 }

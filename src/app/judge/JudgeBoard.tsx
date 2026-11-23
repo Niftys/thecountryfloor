@@ -211,11 +211,13 @@ export function JudgeBoard({
   }, [refreshQueueCount, router]);
 
   useEffect(() => {
+    let shapeChanged = false;
     setHeats((current) => {
       const sameShape =
         current.length === initial.length &&
         current.every((heat, index) => heat.id === initial[index]?.id);
       if (!sameShape) {
+        shapeChanged = true;
         baselines.current = new Map(initial.map((heat) => [heat.id, snapshotHeat(heat)]));
         return initial;
       }
@@ -227,7 +229,20 @@ export function JudgeBoard({
     if (baselines.current.size === 0) {
       baselines.current = new Map(initial.map((heat) => [heat.id, snapshotHeat(heat)]));
     }
+    if (shapeChanged) {
+      setHeatNumber(initial[0]?.number ?? 1);
+      setConfirmOpen(false);
+      setPendingHeatNumber(null);
+      setScratchTarget(null);
+    }
   }, [initial]);
+
+  useEffect(() => {
+    if (heats.length === 0) return;
+    if (!heats.some((item) => item.number === heatNumber)) {
+      setHeatNumber(heats[0]!.number);
+    }
+  }, [heats, heatNumber]);
 
   useEffect(() => {
     refreshQueueCount();
@@ -472,8 +487,14 @@ export function JudgeBoard({
               ›
             </Button>
           </Stack>
-          {heat.submitted ? <Alert severity="success">You already confirmed this heat.</Alert> : null}
-          {dirty ? <Alert severity="warning">You have unsubmitted changes on this heat.</Alert> : null}
+          {heat.submitted ? (
+            <Alert severity="info">
+              This heat is confirmed and locked. Ask a scrutineer to change marks.
+            </Alert>
+          ) : null}
+          {!heat.submitted && dirty ? (
+            <Alert severity="warning">You have unsubmitted changes on this heat.</Alert>
+          ) : null}
 
           <Stack spacing={3} sx={{ mt: 2 }}>
             {heat.groups.map((group) => {
@@ -552,7 +573,7 @@ export function JudgeBoard({
                                 if (entry.scratched || !value) return;
                                 updateEntry(heat.id, entry.heatEntryId, { medal: value });
                               }}
-                              disabled={entry.scratched}
+                              disabled={heat.submitted || entry.scratched}
                               sx={{
                                 display: "flex",
                                 flexWrap: "wrap",
@@ -618,7 +639,12 @@ export function JudgeBoard({
                                         }
                                       : {}),
                                   }}
-                                  disabled={entry.scratched || placeMax <= 1 || (!placeTied && Boolean(entry.medal))}
+                                  disabled={
+                                    heat.submitted ||
+                                    entry.scratched ||
+                                    placeMax <= 1 ||
+                                    (!placeTied && Boolean(entry.medal))
+                                  }
                                 >
                                   <InputLabel id={`place-${entry.heatEntryId}`}>
                                     {placeTied ? "Place (tie — pick)" : "Place"}
@@ -657,6 +683,7 @@ export function JudgeBoard({
                               <TextField
                                 label="Notes"
                                 value={entry.notes}
+                                disabled={heat.submitted}
                                 onChange={(event) =>
                                   updateEntry(heat.id, entry.heatEntryId, {
                                     notes: event.target.value,
@@ -672,6 +699,7 @@ export function JudgeBoard({
                               <Button
                                 color={entry.scratched ? "success" : "error"}
                                 variant="contained"
+                                disabled={heat.submitted}
                                 sx={{ minWidth: 160, minHeight: 64 }}
                                 onClick={() =>
                                   setScratchTarget({
@@ -700,7 +728,9 @@ export function JudgeBoard({
             fullWidth
             variant="contained"
             size="large"
+            disabled={heat.submitted || busy}
             onClick={() => {
+              if (heat.submitted) return;
               for (const group of heat.groups) {
                 const needsPlace = requiresPlacement(group.scale as Scale);
                 const active = group.entries.filter((entry) => !entry.scratched);
@@ -746,7 +776,7 @@ export function JudgeBoard({
               setConfirmOpen(true);
             }}
           >
-            SUBMIT
+            {heat.submitted ? "LOCKED" : "SUBMIT"}
           </Button>
         </CardContent>
       </Card>

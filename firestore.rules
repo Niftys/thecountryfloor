@@ -1,10 +1,68 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Reads for signed-in tablets (live listeners). All writes go through Admin SDK / API.
-    match /{document=**} {
-      allow read: if request.auth != null;
+    function signedIn() {
+      return request.auth != null;
+    }
+    function role() {
+      return signedIn() && request.auth.token.role != null
+        ? request.auth.token.role
+        : '';
+    }
+    function isAdmin() {
+      return role() == 'ADMIN';
+    }
+    function isScrutineer() {
+      return role() == 'SCRUTINEER' || isAdmin();
+    }
+    function isJudge() {
+      return role() == 'JUDGE' || isAdmin();
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || isScrutineer());
       allow write: if false;
+    }
+
+    match /competitions/{competitionId} {
+      allow read: if signedIn();
+      allow write: if false;
+
+      match /divisions/{divisionId} {
+        allow read: if signedIn();
+        allow write: if false;
+
+        match /meta/{docId} {
+          // Live results/summary for scrutineer tablets
+          allow read: if isScrutineer();
+          allow write: if false;
+        }
+
+        match /audits/{auditId} {
+          allow read: if isScrutineer();
+          allow write: if false;
+        }
+      }
+
+      match /sessions/{sessionId} {
+        allow read: if signedIn();
+        allow write: if false;
+
+        match /live/{docId} {
+          allow read: if signedIn();
+          allow write: if false;
+        }
+
+        match /heats/{heatId} {
+          allow read: if signedIn();
+          allow write: if false;
+
+          match /judgeSheets/{judgeId} {
+            allow read: if isScrutineer() || request.auth.uid == judgeId;
+            allow write: if false;
+          }
+        }
+      }
     }
   }
 }

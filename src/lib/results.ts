@@ -13,7 +13,14 @@ import {
   saveDivisionResults,
 } from "@/lib/store/competitions";
 import { scoreKey } from "@/lib/store/paths";
-import type { HeatEntryEmbedded, MarkEmbedded } from "@/lib/store/types";
+import type { HeatEntryEmbedded, MarkEmbedded, MarkOriginal } from "@/lib/store/types";
+
+function originalLabel(original: MarkOriginal | null | undefined): string | null {
+  if (!original) return null;
+  if (original.scratched) return "SCR";
+  const place = original.placement != null ? ` ${original.placement}` : "";
+  return `${original.medal ?? "—"}${place}`;
+}
 import {
   OUTLIER_STEPS,
   medalPoints,
@@ -58,6 +65,18 @@ export type AuditRow = {
   after: string;
 };
 
+export type DanceSheetCell = {
+  scoreId: string;
+  judge: string;
+  medal: string;
+  placement: number | null;
+  notes: string;
+  scratched: boolean;
+  overridden: boolean;
+  canRestore: boolean;
+  originalLabel: string | null;
+};
+
 export type DanceSheet = {
   name: string;
   abbrev: string;
@@ -65,7 +84,7 @@ export type DanceSheet = {
   rows: {
     bib: number;
     name: string;
-    cells: { judge: string; medal: string; placement: number | null; overridden: boolean }[];
+    cells: DanceSheetCell[];
     ordered: string;
     mark: number;
     size: number;
@@ -91,6 +110,9 @@ export type ScoreChoice = {
   notes: string;
   scratched: boolean;
   scale: Scale;
+  overridden: boolean;
+  canRestore: boolean;
+  originalLabel: string | null;
 };
 
 export type ScrutineerView = {
@@ -101,13 +123,15 @@ export type ScrutineerView = {
   divisionName: string;
   sessionName: string;
   sessionComplete: boolean;
+  /** True while any heat that touches this division still awaits a full panel. */
+  provisional: boolean;
   heats: HeatStatus[];
   alerts: AlertItem[];
   summary: SummaryRow[];
   dances: DanceSheet[];
   scores: ScoreChoice[];
   audits: AuditRow[];
-  packet: DivisionPacket;
+  packet?: DivisionPacket;
 };
 
 type EntryMarks = {
@@ -214,6 +238,9 @@ export async function buildAndCacheScrutineerView(input: {
           notes: mark.notes,
           scratched: mark.scratched,
           scale,
+          overridden: Boolean(mark.overridden),
+          canRestore: Boolean(mark.overridden),
+          originalLabel: originalLabel(mark.original),
         });
       }
       const list = byDance.get(entry.danceId) ?? [];
@@ -274,28 +301,23 @@ export async function buildAndCacheScrutineerView(input: {
         const entryMarks = entryMarksList.find((item) => item.entry.competitorId === row.id);
         if (!entryMarks) continue;
         const active = activeById.get(row.id) ?? [];
-        const cells = judgeIds
-          .map((judgeId) => {
-            const score = active.find((item) => item.judgeId === judgeId);
-            return score
-              ? {
-                  judge: score.judgeName,
-                  medal: score.medal,
-                  placement: score.placement,
-                  overridden: score.overridden,
-                }
-              : null;
-          })
-          .filter(
-            (
-              cell,
-            ): cell is {
-              judge: string;
-              medal: string;
-              placement: number | null;
-              overridden: boolean;
-            } => cell != null,
-          );
+        const cells: DanceSheetCell[] = judgeIds.flatMap((judgeId) => {
+          const score = entryMarks.byJudge.get(judgeId);
+          if (!score) return [];
+          return [
+            {
+              scoreId: scoreKey(heat.id, entryMarks.entry.id, judgeId),
+              judge: score.judgeName,
+              medal: score.medal ?? "",
+              placement: score.placement,
+              notes: score.notes ?? "",
+              scratched: score.scratched,
+              overridden: score.overridden,
+              canRestore: Boolean(score.overridden),
+              originalLabel: originalLabel(score.original),
+            },
+          ];
+        });
 
         const hasOverride = active.some((score) => score.overridden);
         sheet.push({
@@ -421,6 +443,15 @@ export async function buildAndCacheScrutineerView(input: {
     })),
   });
 
+  const divisionHeatIds = new Set(
+    heats
+      .filter((heat) => heat.entries.some((entry) => entry.divisionId === division.id))
+      .map((heat) => heat.id),
+  );
+  const relevantStatuses = heatStatuses.filter((heat) => divisionHeatIds.has(heat.id));
+  const provisional =
+    relevantStatuses.length === 0 || relevantStatuses.some((heat) => !heat.complete);
+
   const view: ScrutineerView = {
     competition: {
       id: competition.id,
@@ -434,6 +465,7 @@ export async function buildAndCacheScrutineerView(input: {
     divisionName: division.name,
     sessionName: session.name,
     sessionComplete: heatStatuses.length > 0 && heatStatuses.every((heat) => heat.complete),
+    provisional,
     heats: heatStatuses,
     alerts,
     summary,
@@ -452,11 +484,10 @@ export async function buildAndCacheScrutineerView(input: {
     packet,
   };
 
+  // Omit bulky export packet from the live cache listener payload.
+  const { packet: _packet, ...cacheView } = view;
   await saveDivisionResults(input.competitionId, input.divisionId, {
-    view: {
-      ...view,
-      // keep packet for export; strip nothing essential
-    },
+    view: cacheView,
   });
 
   return view;
@@ -475,10 +506,13 @@ export async function loadScrutineerView(input: {
     if (view && view.sessionId === input.sessionId) {
       const live = await getSessionLive(input.competitionId, input.sessionId);
       if (live) {
+        const sessionComplete =
+          live.heats.length > 0 && live.heats.every((heat) => heat.complete);
         return {
           ...view,
           heats: live.heats,
-          sessionComplete: live.heats.length > 0 && live.heats.every((heat) => heat.complete),
+          sessionComplete,
+          provisional: view.provisional || !sessionComplete,
         };
       }
       return view;

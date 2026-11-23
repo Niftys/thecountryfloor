@@ -27,14 +27,7 @@ export async function getSession(): Promise<SessionUser | null> {
 
   try {
     const decoded = await adminAuth.verifySessionCookie(session, true);
-    const role = (decoded.role as Role | undefined) ?? null;
-    const username = (decoded.username as string | undefined) ?? "";
-    const displayName = (decoded.displayName as string | undefined) ?? username;
-
-    if (role && username) {
-      return { id: decoded.uid, role, username, displayName };
-    }
-
+    // Always prefer Firestore profile so role/name changes apply without re-login.
     const profile = await adminDb.collection("users").doc(decoded.uid).get();
     if (!profile.exists) return null;
     const data = profile.data() as { role: Role; username: string; displayName: string };

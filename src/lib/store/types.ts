@@ -84,12 +84,22 @@ export type HeatDoc = {
   cddData?: Record<string, unknown> | null;
 };
 
+/** Judge's confirmed mark snapshot — kept when a scrutineer overrides so restore is possible. */
+export type MarkOriginal = {
+  medal: string | null;
+  placement: number | null;
+  notes: string;
+  scratched: boolean;
+};
+
 export type MarkEmbedded = {
   medal: string | null;
   placement: number | null;
   notes: string;
   scratched: boolean;
   overridden: boolean;
+  /** Set on first scrutineer edit; unchanged by later edits. */
+  original?: MarkOriginal | null;
 };
 
 export type JudgeSheetDoc = {

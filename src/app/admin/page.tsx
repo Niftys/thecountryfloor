@@ -104,7 +104,11 @@ export default async function AdminPage({ searchParams }: Props) {
                   {competition.dateLabel}
                   {competition.location ? ` · ${competition.location}` : ""} · {competition.status}
                 </Typography>
-                <CompetitionActiveToggle competitionId={competition.id} active={competition.active} />
+                <CompetitionActiveToggle
+                  key={competition.id}
+                  competitionId={competition.id}
+                  active={competition.active}
+                />
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                   {divisions.map((division) => (
                     <Chip
@@ -150,6 +154,7 @@ export default async function AdminPage({ searchParams }: Props) {
           <Card>
             <CardContent>
               <SessionJudgesEditor
+                key={session.id}
                 competitionId={competition!.id}
                 sessionId={session.id}
                 sessionName={session.name}

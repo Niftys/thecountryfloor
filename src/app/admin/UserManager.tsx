@@ -79,7 +79,7 @@ export function UserManager({ users, currentUserId }: Props) {
     setMessage("");
     setError("");
     const response = await fetch(`/api/admin/users/${editUser.id}`, {
-      method: "PATCH",
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         username: editForm.username,

@@ -12,6 +12,7 @@ import {
 } from "@/lib/store/paths";
 import type {
   AuditDoc,
+  MarkOriginal,
   CompetitionDoc,
   DivisionDoc,
   HeatDoc,
@@ -118,17 +119,19 @@ export async function rebuildSessionLive(competitionId: string, sessionId: strin
   const session = await getSession(competitionId, sessionId);
   if (!session) return null;
   const heats = await listHeats(competitionId, sessionId);
+  const panel = new Set(session.judgeIds);
   const judgeCount = session.judgeIds.length;
   const liveHeats: LiveHeatStatus[] = heats.map((heat) => {
     const divisions = [...new Set(heat.entries.map((entry) => entry.divisionName))];
     const style = heat.styleName || `Heat ${heat.number}`;
+    const confirmed = heat.confirmedJudgeIds.filter((id) => panel.has(id)).length;
     return {
       id: heat.id,
       number: heat.number,
       label: divisions.length > 1 ? `${style} · ${divisions.join(" + ")}` : style,
-      confirmed: heat.confirmCount,
+      confirmed,
       judges: judgeCount,
-      complete: judgeCount > 0 && heat.confirmCount >= judgeCount,
+      complete: judgeCount > 0 && confirmed >= judgeCount,
     };
   });
   const live: SessionLiveDoc = {
@@ -144,7 +147,21 @@ export async function setSessionJudges(
   sessionId: string,
   judgeIds: string[],
 ) {
+  const panel = new Set(judgeIds);
   await adminDb.doc(sessionPath(competitionId, sessionId)).update({ judgeIds });
+  const heats = await listHeats(competitionId, sessionId);
+  for (const heat of heats) {
+    const next = heat.confirmedJudgeIds.filter((id) => panel.has(id));
+    if (
+      next.length !== heat.confirmedJudgeIds.length ||
+      heat.confirmCount !== next.length
+    ) {
+      await adminDb.doc(heatPath(competitionId, sessionId, heat.id)).update({
+        confirmedJudgeIds: next,
+        confirmCount: next.length,
+      });
+    }
+  }
   await rebuildSessionLive(competitionId, sessionId);
 }
 
@@ -250,46 +267,52 @@ export async function submitJudgeHeat(input: {
     heatPath(input.competitionId, input.sessionId, input.heatId),
   );
 
-  const existing = await sheetRef.get();
-  if (
-    input.clientRequestId &&
-    existing.exists &&
-    (existing.data() as JudgeSheetDoc).clientRequestId === input.clientRequestId
-  ) {
-    return { ok: true as const, idempotent: true };
-  }
+  let idempotent = false;
+  await adminDb.runTransaction(async (tx) => {
+    const existing = await tx.get(sheetRef);
+    if (
+      input.clientRequestId &&
+      existing.exists &&
+      (existing.data() as JudgeSheetDoc).clientRequestId === input.clientRequestId
+    ) {
+      idempotent = true;
+      return;
+    }
 
-  const heat = await heatRef.get();
-  if (!heat.exists) throw new Error("Heat not found");
-  const heatData = heat.data() as HeatDoc;
-  const session = await getSession(input.competitionId, input.sessionId);
-  if (!session) throw new Error("Session not found");
-  if (!session.judgeIds.includes(input.judgeId)) throw new Error("Judge not on panel");
+    const heatSnap = await tx.get(heatRef);
+    if (!heatSnap.exists) throw new Error("Heat not found");
+    const heatData = heatSnap.data() as HeatDoc;
+    const session = await getSession(input.competitionId, input.sessionId);
+    if (!session) throw new Error("Session not found");
+    if (!session.judgeIds.includes(input.judgeId)) throw new Error("Judge not on panel");
 
-  const confirmedAt = input.confirm
-    ? new Date().toISOString()
-    : ((existing.data() as JudgeSheetDoc | undefined)?.confirmedAt ?? null);
-  const sheet: JudgeSheetDoc = {
-    marks: input.marks,
-    confirmedAt,
-    clientRequestId: input.clientRequestId ?? null,
-  };
+    const prior = existing.exists ? (existing.data() as JudgeSheetDoc) : null;
+    if (prior?.confirmedAt) {
+      throw new Error("This heat is already confirmed and locked. Ask a scrutineer to change marks.");
+    }
 
-  const batch = adminDb.batch();
-  batch.set(sheetRef, sheet, { merge: true });
+    const confirmedAt = input.confirm ? new Date().toISOString() : null;
+    const sheet: JudgeSheetDoc = {
+      marks: input.marks,
+      confirmedAt,
+      clientRequestId: input.clientRequestId ?? null,
+    };
+    tx.set(sheetRef, sheet, { merge: true });
 
-  if (input.confirm) {
-    const already = heatData.confirmedJudgeIds.includes(input.judgeId);
-    const confirmedJudgeIds = already
-      ? heatData.confirmedJudgeIds
-      : [...heatData.confirmedJudgeIds, input.judgeId];
-    batch.update(heatRef, {
-      confirmedJudgeIds,
-      confirmCount: confirmedJudgeIds.length,
-    });
-  }
+    if (input.confirm) {
+      const panel = new Set(session.judgeIds);
+      let confirmedJudgeIds = heatData.confirmedJudgeIds.filter((id) => panel.has(id));
+      if (!confirmedJudgeIds.includes(input.judgeId)) {
+        confirmedJudgeIds = [...confirmedJudgeIds, input.judgeId];
+      }
+      tx.update(heatRef, {
+        confirmedJudgeIds,
+        confirmCount: confirmedJudgeIds.length,
+      });
+    }
+  });
 
-  await batch.commit();
+  if (idempotent) return { ok: true as const, idempotent: true };
   if (input.confirm) await rebuildSessionLive(input.competitionId, input.sessionId);
   return { ok: true as const, idempotent: false };
 }
@@ -342,6 +365,42 @@ export async function listAudits(competitionId: string, divisionId: string, limi
   return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as AuditDoc) }));
 }
 
+function asOriginal(mark: {
+  medal: string | null;
+  placement: number | null;
+  notes: string;
+  scratched: boolean;
+}): MarkOriginal {
+  return {
+    medal: mark.medal,
+    placement: mark.placement,
+    notes: mark.notes,
+    scratched: mark.scratched,
+  };
+}
+
+async function findOriginalFromAudits(
+  competitionId: string,
+  divisionId: string,
+  scoreKeyValue: string,
+): Promise<MarkOriginal | null> {
+  const audits = await listAudits(competitionId, divisionId, 250);
+  const chronological = [...audits]
+    .filter((audit) => audit.scoreKey === scoreKeyValue)
+    .sort((a, b) => a.at.localeCompare(b.at));
+  for (const audit of chronological) {
+    try {
+      const before = JSON.parse(audit.before) as MarkEmbedded | null;
+      if (!before) continue;
+      if (!before.overridden) return asOriginal(before);
+      if (before.original) return before.original;
+    } catch {
+      /* skip bad audit rows */
+    }
+  }
+  return null;
+}
+
 export async function updateJudgeMark(input: {
   competitionId: string;
   sessionId: string;
@@ -365,7 +424,22 @@ export async function updateJudgeMark(input: {
     confirmedAt: null,
   };
   const before = sheet.marks[input.entryId] ?? null;
-  const after: MarkEmbedded = { ...input.mark, overridden: true };
+  const scoreKeyValue = `${input.heatId}__${input.entryId}__${input.judgeId}`;
+  let original = before?.original ?? null;
+  if (!original && before && !before.overridden) {
+    original = asOriginal(before);
+  }
+  if (!original && before?.overridden) {
+    original = await findOriginalFromAudits(input.competitionId, input.divisionId, scoreKeyValue);
+  }
+  const after: MarkEmbedded = {
+    medal: input.mark.medal,
+    placement: input.mark.placement,
+    notes: input.mark.notes,
+    scratched: input.mark.scratched,
+    overridden: true,
+    original,
+  };
   sheet.marks[input.entryId] = after;
   await sheetRef.set(sheet, { merge: true });
   await appendAudit(input.competitionId, input.divisionId, {
@@ -378,7 +452,60 @@ export async function updateJudgeMark(input: {
     judgeName: input.judgeName,
     before: JSON.stringify(before),
     after: JSON.stringify(after),
-    scoreKey: `${input.heatId}__${input.entryId}__${input.judgeId}`,
+    scoreKey: scoreKeyValue,
+  });
+}
+
+/** Restore a mark to the judge's original confirmed grade (undo scrutineer override). */
+export async function restoreJudgeMark(input: {
+  competitionId: string;
+  sessionId: string;
+  heatId: string;
+  judgeId: string;
+  entryId: string;
+  actorId: string;
+  actorName: string;
+  bib: number;
+  dance: string;
+  judgeName: string;
+  divisionId: string;
+}) {
+  const sheetRef = adminDb.doc(
+    judgeSheetPath(input.competitionId, input.sessionId, input.heatId, input.judgeId),
+  );
+  const existing = await sheetRef.get();
+  if (!existing.exists) throw new Error("Judge sheet not found");
+  const sheet = existing.data() as JudgeSheetDoc;
+  const before = sheet.marks[input.entryId];
+  if (!before) throw new Error("Mark not found");
+  if (!before.overridden) throw new Error("Mark is already the judge's original.");
+
+  const scoreKeyValue = `${input.heatId}__${input.entryId}__${input.judgeId}`;
+  const original =
+    before.original ??
+    (await findOriginalFromAudits(input.competitionId, input.divisionId, scoreKeyValue));
+  if (!original) {
+    throw new Error("No original judge mark is stored for this score; cannot restore.");
+  }
+
+  const after: MarkEmbedded = {
+    ...original,
+    overridden: false,
+    original: null,
+  };
+  sheet.marks[input.entryId] = after;
+  await sheetRef.set(sheet, { merge: true });
+  await appendAudit(input.competitionId, input.divisionId, {
+    at: new Date().toISOString(),
+    actorId: input.actorId,
+    actorName: input.actorName,
+    bib: input.bib,
+    dance: input.dance,
+    judgeId: input.judgeId,
+    judgeName: input.judgeName,
+    before: JSON.stringify(before),
+    after: JSON.stringify(after),
+    scoreKey: scoreKeyValue,
   });
 }
 

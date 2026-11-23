@@ -84,11 +84,13 @@ export async function POST(request: Request) {
     const entry = heat.entries.find((item) => item.divisionId === divisionId);
     const scale = (entry?.scale ?? "COUPLES") as Scale;
     const active = scores.filter((score) => !score.scratched);
+    for (const score of active) {
+      if (!score.medal) {
+        return NextResponse.json({ error: "Every dancing couple needs a medal." }, { status: 400 });
+      }
+    }
     if (requiresPlacement(scale) && active.length > 1) {
       for (const score of active) {
-        if (!score.medal) {
-          return NextResponse.json({ error: "Every dancing couple needs a medal." }, { status: 400 });
-        }
         if (!score.placement) {
           return NextResponse.json({ error: "Every dancing couple needs a place." }, { status: 400 });
         }

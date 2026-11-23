@@ -2,7 +2,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { parseCddPayload } from "@/lib/cdd/adapter";
 import type { CddCompetitionPayload } from "@/lib/cdd/types";
 import { DANCE_STYLES, danceOrder } from "@/lib/dances";
-import { rebuildSessionLive } from "@/lib/store/competitions";
+import { listDivisions, listHeats, listSessions, rebuildSessionLive } from "@/lib/store/competitions";
 import { competitionRef, divisionPath, heatPath, sessionPath } from "@/lib/store/paths";
 import { findUserByUsername } from "@/lib/store/users";
 import type {
@@ -27,7 +27,7 @@ export async function importCddCompetition(raw: unknown) {
   if (!parsed.ok) return parsed;
 
   const data: CddCompetitionPayload = parsed.data;
-  const heatingNotes = parsed.heatingWarnings;
+  const heatingNotes = [...parsed.heatingWarnings];
   const existingSnap = data.competition.cddId
     ? await adminDb
         .collection("competitions")
@@ -56,12 +56,18 @@ export async function importCddCompetition(raw: unknown) {
   const danceIds = new Map<string, string>();
   const competitorIds = new Map<string, string>();
   const divisionDocs = new Map<string, DivisionDoc & { id: string }>();
+  const existingDivisions = await listDivisions(competitionId);
+  const existingSessions = await listSessions(competitionId);
 
   for (const div of data.divisions) {
-    const divisionId = adminDb.collection("x").doc().id;
+    const prior =
+      existingDivisions.find((item) => div.cddId && item.cddId === div.cddId) ??
+      existingDivisions.find((item) => item.name === div.name);
+    const divisionId = prior?.id ?? adminDb.collection("x").doc().id;
     const dances = [...div.dances]
       .map((dance, index) => {
-        const id = `${divisionId}_d_${dance.abbrev}`;
+        const priorDance = prior?.dances.find((item) => item.abbrev === dance.abbrev);
+        const id = priorDance?.id ?? `${divisionId}_d_${dance.abbrev}`;
         danceIds.set(`${div.name}:${dance.abbrev}`, id);
         return {
           id,
@@ -72,7 +78,10 @@ export async function importCddCompetition(raw: unknown) {
       })
       .sort((a, b) => a.sortOrder - b.sortOrder);
     const competitors = div.competitors.map((couple) => {
-      const id = couple.cddId ?? `${divisionId}_c_${couple.bib}`;
+      const priorCouple =
+        prior?.competitors.find((item) => couple.cddId && item.cddId === couple.cddId) ??
+        prior?.competitors.find((item) => item.bib === couple.bib);
+      const id = priorCouple?.id ?? couple.cddId ?? `${divisionId}_c_${couple.bib}`;
       competitorIds.set(`${div.name}:${couple.bib}`, id);
       return {
         id,
@@ -97,16 +106,30 @@ export async function importCddCompetition(raw: unknown) {
   }
 
   for (const sess of data.sessions) {
-    const sessionId = sess.cddId ?? adminDb.collection("x").doc().id;
+    const priorSession =
+      existingSessions.find((item) => sess.cddId && item.cddId === sess.cddId) ??
+      existingSessions.find((item) => item.name === sess.name);
+    const sessionId = priorSession?.id ?? sess.cddId ?? adminDb.collection("x").doc().id;
+    const existingHeats = priorSession ? await listHeats(competitionId, sessionId) : [];
     const judgeIds: string[] = [];
+    const missingJudges: string[] = [];
     for (const username of sess.judgeUsernames) {
       const user = await findUserByUsername(username);
       if (user) judgeIds.push(user.id);
+      else missingJudges.push(username);
+    }
+    if (missingJudges.length > 0) {
+      heatingNotes.push(
+        `Session ${sess.name}: unknown judge usernames skipped (${missingJudges.join(", ")}).`,
+      );
     }
 
     const heatIndex: SessionDoc["heatIndex"] = [];
     for (const heat of sess.heats) {
-      const heatId = heat.cddId ?? adminDb.collection("x").doc().id;
+      const priorHeat =
+        existingHeats.find((item) => heat.cddId && item.cddId === heat.cddId) ??
+        existingHeats.find((item) => item.number === heat.number);
+      const heatId = priorHeat?.id ?? heat.cddId ?? adminDb.collection("x").doc().id;
       const entries: HeatEntryEmbedded[] = [];
       for (const entry of heat.entries) {
         const divisionId = divisionIds.get(entry.divisionName);

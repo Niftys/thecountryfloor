@@ -6,9 +6,12 @@ import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
+import { signOut } from "firebase/auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ClientAuthGate } from "@/components/ClientAuthGate";
 import { ThemePrefsToggles } from "@/components/ThemePrefs";
+import { getClientAuth } from "@/lib/firebase/client";
 
 type Props = {
   title: string;
@@ -22,6 +25,11 @@ export function AppShell({ title, role, displayName, links = [], children }: Pro
   const router = useRouter();
 
   async function logout() {
+    try {
+      await signOut(getClientAuth());
+    } catch {
+      /* ignore */
+    }
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
     router.refresh();
@@ -50,7 +58,9 @@ export function AppShell({ title, role, displayName, links = [], children }: Pro
           </Stack>
         </Toolbar>
       </AppBar>
-      <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1400, mx: "auto" }}>{children}</Box>
+      <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1400, mx: "auto" }}>
+        <ClientAuthGate>{children}</ClientAuthGate>
+      </Box>
     </Box>
   );
 }

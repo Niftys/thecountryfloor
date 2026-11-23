@@ -71,7 +71,16 @@ async function ensureUser(input: {
 }
 
 async function main() {
-  console.log("Wiping previous seed data…");
+  const usingEmulator = Boolean(process.env.FIRESTORE_EMULATOR_HOST);
+  if (!usingEmulator && process.env.ALLOW_LIVE_SEED !== "true") {
+    console.error(
+      "Refusing to seed the live Firebase project.\n" +
+        "Use emulators, or set ALLOW_LIVE_SEED=true with GOOGLE_APPLICATION_CREDENTIALS.",
+    );
+    process.exit(1);
+  }
+
+  console.log(usingEmulator ? "Wiping emulator seed data…" : "Wiping LIVE project seed data…");
   await wipeCompetitions();
   await wipeUsers();
 

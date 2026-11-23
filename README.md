@@ -41,6 +41,8 @@ npm run dev
 
 Password: `demo12`
 
+Live project seed (destructive) requires `ALLOW_LIVE_SEED=true` plus a service account. Deploy rules after rule changes: `firebase deploy --only firestore:rules`.
+
 - `admin`
 - `scrutineer`
 - Judges: `d.appel`, `k.linkous`, `s.hansen`, `c.graber`, `r.champion`
