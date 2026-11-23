@@ -59,26 +59,26 @@ export function ThemePrefsProvider({ children }: { children: React.ReactNode }) 
       components: {
         MuiToggleButton: {
           styleOverrides: {
-            root: ({ theme: t }) => ({
+            root: {
               minWidth: 52 * bump,
               minHeight: 52 * bump,
               padding: "8px 10px",
               fontSize: `${1.15 * bump}rem`,
               fontWeight: 800,
               lineHeight: 1,
-              [t.breakpoints.up("sm")]: {
+              [baseTheme.breakpoints.up("sm")]: {
                 minWidth: 72 * bump,
                 minHeight: 72 * bump,
                 padding: "10px 12px",
                 fontSize: `${1.45 * bump}rem`,
               },
-              [t.breakpoints.up("md")]: {
+              [baseTheme.breakpoints.up("md")]: {
                 minWidth: 88 * bump,
                 minHeight: 88 * bump,
                 padding: "12px 16px",
                 fontSize: `${1.75 * bump}rem`,
               },
-              [t.breakpoints.up("lg")]: {
+              [baseTheme.breakpoints.up("lg")]: {
                 minWidth: 96 * bump,
                 minHeight: 96 * bump,
                 fontSize: `${1.85 * bump}rem`,
@@ -90,16 +90,16 @@ export function ThemePrefsProvider({ children }: { children: React.ReactNode }) 
                     "&.Mui-selected": { bgcolor: "#000", color: "#fff" },
                   }
                 : {}),
-            }),
+            },
           },
         },
         MuiButton: {
           styleOverrides: {
-            root: ({ theme: t }) => ({
+            root: {
               minHeight: 44 * bump,
-              [t.breakpoints.up("sm")]: { minHeight: 52 * bump },
-              [t.breakpoints.up("md")]: { minHeight: 56 * bump },
-            }),
+              [baseTheme.breakpoints.up("sm")]: { minHeight: 52 * bump },
+              [baseTheme.breakpoints.up("md")]: { minHeight: 56 * bump },
+            },
           },
         },
       },
