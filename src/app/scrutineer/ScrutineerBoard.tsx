@@ -20,6 +20,7 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useEffect, useMemo, useState } from "react";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useFirestoreDoc } from "@/hooks/useFirestoreDoc";
 import type { DanceSheetCell, ScoreChoice, ScrutineerView } from "@/lib/results";
 import { COUPLES_SCALE, PROAM_SCALE, formatDancePlace, requiresPlacement } from "@/lib/scoring";
@@ -42,7 +43,7 @@ function PenIcon() {
       sx={{
         display: "inline-flex",
         ml: 0.5,
-        opacity: 0,
+        opacity: 0.55,
         verticalAlign: "middle",
         transition: "opacity 0.15s ease",
         color: "primary.main",
@@ -56,6 +57,7 @@ function PenIcon() {
 }
 
 export function ScrutineerBoard({ initial }: Props) {
+  const { isPhone } = useResponsiveLayout();
   const [view, setView] = useState(initial);
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const [medal, setMedal] = useState("");
@@ -65,7 +67,7 @@ export function ScrutineerBoard({ initial }: Props) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [liveLabel, setLiveLabel] = useState("Live");
+  const [liveLabel, setLiveLabel] = useState("Connecting");
   const [danceFilter, setDanceFilter] = useState(initial.dances[0]?.abbrev ?? "");
   const [auditQuery, setAuditQuery] = useState("");
 
@@ -226,6 +228,10 @@ export function ScrutineerBoard({ initial }: Props) {
 
   const medals = edit?.score.scale === "PROAM" ? PROAM_SCALE : COUPLES_SCALE;
   const listenerError = liveError || resultsError;
+
+  useEffect(() => {
+    if (listenerError) setLiveLabel("Offline");
+  }, [listenerError]);
   const activeDance = view.dances.find((d) => d.abbrev === danceFilter) ?? view.dances[0] ?? null;
 
   const filteredAudits = useMemo(() => {
@@ -256,14 +262,14 @@ export function ScrutineerBoard({ initial }: Props) {
           >
             {view.sessionName} · {view.divisionName}
           </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5, display: { xs: "none", sm: "block" } }}>
-            Hover a mark and use the pen to edit.
+          <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: { xs: "0.9rem", md: "1rem" } }}>
+            Tap a mark to edit it. Swipe a sheet sideways to see every column.
           </Typography>
         </Box>
         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
           <Chip
             label={liveLabel === "Live" ? "Updating live" : liveLabel}
-            color="success"
+            color={liveLabel === "Live" ? "success" : "default"}
             variant="outlined"
           />
           <Chip
@@ -368,7 +374,7 @@ export function ScrutineerBoard({ initial }: Props) {
               borderColor: "divider",
             }}
           >
-            <Table size="small" stickyHeader>
+            <Table size="small" stickyHeader sx={{ minWidth: 720 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Comp #</TableCell>
@@ -442,7 +448,7 @@ export function ScrutineerBoard({ initial }: Props) {
           >
             <Box>
               <Typography variant="h5">Dance sheets</Typography>
-              <Typography color="text.secondary">Click a mark to edit.</Typography>
+              <Typography color="text.secondary">Tap a mark to edit.</Typography>
             </Box>
             <TextField
               select
@@ -469,7 +475,7 @@ export function ScrutineerBoard({ initial }: Props) {
                 borderColor: "divider",
               }}
             >
-              <Table size="medium" stickyHeader>
+              <Table size="medium" stickyHeader sx={{ minWidth: 980 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell>Comp #</TableCell>
@@ -622,7 +628,7 @@ export function ScrutineerBoard({ initial }: Props) {
               borderColor: "divider",
             }}
           >
-            <Table size="small" stickyHeader>
+            <Table size="small" stickyHeader sx={{ minWidth: 760 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>When</TableCell>
@@ -657,7 +663,13 @@ export function ScrutineerBoard({ initial }: Props) {
         </CardContent>
       </Card>
 
-      <Dialog open={Boolean(edit)} onClose={() => setEdit(null)} fullWidth maxWidth="sm">
+      <Dialog
+        open={Boolean(edit)}
+        onClose={() => setEdit(null)}
+        fullScreen={isPhone}
+        fullWidth
+        maxWidth="sm"
+      >
         <DialogTitle>
           Edit mark
           {edit

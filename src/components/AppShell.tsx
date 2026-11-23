@@ -52,23 +52,34 @@ export function AppShell({
   }
 
   return (
-    <Box sx={{ minHeight: "100dvh", bgcolor: "background.default" }}>
-      <AppBar position="sticky" elevation={2} color="primary">
+    <Box
+      sx={{
+        height: "100dvh",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        bgcolor: "background.default",
+        pt: "env(safe-area-inset-top)",
+        pb: "env(safe-area-inset-bottom)",
+        pl: "env(safe-area-inset-left)",
+        pr: "env(safe-area-inset-right)",
+      }}
+    >
+      <AppBar position="static" elevation={2} color="primary" sx={{ flexShrink: 0 }}>
         <Toolbar
           sx={{
             gap: { xs: 0.75, md: scoringFocus ? 1 : 2 },
-            minHeight: scoringFocus
-              ? { xs: 48, sm: 52 }
-              : { xs: 56, sm: 64, md: 72 },
-            flexWrap: "wrap",
-            py: scoringFocus ? 0.5 : { xs: 0.75, md: 1.25 },
+            minHeight: scoringFocus ? { xs: 48, sm: 52 } : { xs: 56, sm: 64 },
+            flexWrap: scoringFocus ? "nowrap" : "wrap",
+            py: scoringFocus ? 0.5 : { xs: 0.75, md: 1 },
             px: { xs: 1.25, sm: 2 },
           }}
         >
-          <Box sx={{ flex: 1, minWidth: { xs: 80, sm: 140 } }}>
+          <Box sx={{ flex: "1 1 auto", minWidth: 0 }}>
             <Typography
               variant="h5"
               component="h1"
+              noWrap
               sx={{
                 fontSize: scoringFocus
                   ? { xs: "1.05rem", sm: "1.2rem" }
@@ -80,6 +91,7 @@ export function AppShell({
             {!scoringFocus ? (
               <Typography
                 variant="body2"
+                noWrap
                 sx={{
                   opacity: 0.95,
                   fontSize: { xs: "0.8rem", md: "1rem" },
@@ -87,13 +99,21 @@ export function AppShell({
                 }}
               >
                 {displayName}
-                {ROLE_LABEL[role] && title !== ROLE_LABEL[role]
+                {ROLE_LABEL[role] &&
+                title !== ROLE_LABEL[role] &&
+                displayName !== ROLE_LABEL[role]
                   ? ` · ${ROLE_LABEL[role]}`
                   : ""}
               </Typography>
             ) : null}
           </Box>
-          <Stack direction="row" spacing={{ xs: 0.5, sm: 1 }} alignItems="center" useFlexGap flexWrap="wrap">
+          <Stack
+            direction="row"
+            spacing={{ xs: 0.5, sm: 1 }}
+            alignItems="center"
+            useFlexGap
+            sx={{ flexShrink: 0 }}
+          >
             {links.map((link) => (
               <Button
                 key={link.href}
@@ -131,11 +151,16 @@ export function AppShell({
         </Toolbar>
       </AppBar>
       <Box
+        component="main"
         sx={{
+          flex: 1,
+          minHeight: 0,
+          overflow: "auto",
+          display: "flex",
+          flexDirection: "column",
           p: scoringFocus ? { xs: 1, sm: 1.25, md: 1.5 } : { xs: 1.25, sm: 2, md: 3 },
           maxWidth: 1400,
           mx: "auto",
-          pb: scoringFocus ? { xs: 1, md: 2 } : { xs: 8, md: 4 },
           width: "100%",
         }}
       >

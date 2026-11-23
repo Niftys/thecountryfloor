@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "test": "tsx --test src/lib/scoring.test.ts src/lib/cdd/adapter.test.ts src/lib/seed/acdaNationalsPlan.test.ts",
-    "seed": "tsx scripts/seed-firestore.ts",
+    "seed": "tsx --env-file=.env scripts/seed-firestore.ts",
     "emulators": "firebase emulators:start --only auth,firestore"
   },
   "engines": {

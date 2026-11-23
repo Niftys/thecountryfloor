@@ -26,6 +26,9 @@ export async function POST(request: Request) {
   if (!body.username || !body.displayName || !body.role || !body.password) {
     return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
+  if (body.password.length < 6) {
+    return NextResponse.json({ error: "Password must be at least 6 characters." }, { status: 400 });
+  }
   if (!["ADMIN", "JUDGE", "SCRUTINEER"].includes(body.role)) {
     return NextResponse.json({ error: "Invalid role" }, { status: 400 });
   }

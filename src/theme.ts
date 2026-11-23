@@ -43,10 +43,12 @@ export const theme = createTheme({
     MuiButton: {
       defaultProps: { size: "large" },
       styleOverrides: {
-        root: ({ theme: t }) => ({
+        root: { borderRadius: 12 },
+        sizeSmall: { minHeight: 32, paddingInline: 10 },
+        sizeMedium: { minHeight: 40, paddingInline: 14 },
+        sizeLarge: ({ theme: t }) => ({
           minHeight: 44,
           paddingInline: 14,
-          borderRadius: 12,
           [t.breakpoints.up("sm")]: { minHeight: 52, paddingInline: 18 },
           [t.breakpoints.up("md")]: { minHeight: 56, paddingInline: 22 },
         }),
@@ -54,42 +56,55 @@ export const theme = createTheme({
     },
     MuiChip: {
       styleOverrides: {
-        root: ({ theme: t }) => ({
-          fontWeight: 700,
-          fontSize: "0.9rem",
-          minHeight: 32,
-          [t.breakpoints.up("md")]: { fontSize: "1rem", minHeight: 40 },
-        }),
+        root: ({ ownerState, theme: t }) =>
+          ownerState.size === "small"
+            ? { fontWeight: 700, fontSize: "0.8rem" }
+            : {
+                fontWeight: 700,
+                fontSize: "0.9rem",
+                minHeight: 32,
+                [t.breakpoints.up("md")]: { fontSize: "1rem", minHeight: 36 },
+              },
         label: { px: 1.25 },
       },
     },
     MuiToggleButton: {
       styleOverrides: {
-        root: ({ theme: t }) => ({
-          minWidth: 52,
-          minHeight: 52,
-          padding: "8px 10px",
-          fontSize: "1.15rem",
-          fontWeight: 800,
-          lineHeight: 1,
-          [t.breakpoints.up("sm")]: {
-            minWidth: 72,
-            minHeight: 72,
-            padding: "10px 12px",
-            fontSize: "1.45rem",
-          },
-          [t.breakpoints.up("md")]: {
-            minWidth: 88,
-            minHeight: 88,
-            padding: "12px 16px",
-            fontSize: "1.75rem",
-          },
-          [t.breakpoints.up("lg")]: {
-            minWidth: 96,
-            minHeight: 96,
-            fontSize: "1.85rem",
-          },
-        }),
+        root: ({ ownerState, theme: t }) =>
+          ownerState.size === "small"
+            ? {
+                minWidth: 34,
+                minHeight: 32,
+                padding: "2px 4px",
+                fontSize: "0.8rem",
+                fontWeight: 800,
+                lineHeight: 1,
+              }
+            : {
+                minWidth: 52,
+                minHeight: 52,
+                padding: "8px 10px",
+                fontSize: "1.15rem",
+                fontWeight: 800,
+                lineHeight: 1,
+                [t.breakpoints.up("sm")]: {
+                  minWidth: 72,
+                  minHeight: 72,
+                  padding: "10px 12px",
+                  fontSize: "1.45rem",
+                },
+                [t.breakpoints.up("md")]: {
+                  minWidth: 88,
+                  minHeight: 88,
+                  padding: "12px 16px",
+                  fontSize: "1.75rem",
+                },
+                [t.breakpoints.up("lg")]: {
+                  minWidth: 96,
+                  minHeight: 96,
+                  fontSize: "1.85rem",
+                },
+              },
       },
     },
     MuiTextField: {
@@ -123,6 +138,7 @@ export const theme = createTheme({
         head: ({ theme: t }) => ({
           fontWeight: 800,
           fontSize: "0.9rem",
+          whiteSpace: "nowrap",
           bgcolor: "#f5f7f9",
           [t.breakpoints.up("md")]: { fontSize: "1rem" },
         }),
