@@ -206,8 +206,7 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
             />
           </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Showing {heatRows.length} of {heats.length} heats · dances listed in competition floor
-            order
+            {heatRows.length} of {heats.length} heats
           </Typography>
           <Box sx={{ maxHeight: 360, overflow: "auto", border: "1px solid", borderColor: "divider" }}>
             <Table size="small" stickyHeader>
@@ -216,25 +215,29 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
                   <TableCell>Heat</TableCell>
                   <TableCell>Style</TableCell>
                   <TableCell>Divisions</TableCell>
-                  <TableCell>Couples</TableCell>
+                  <TableCell>#</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {heatRows.map((heat) => {
-                  const divisionsLabel = [
-                    ...new Set(heat.entries.map((entry) => entry.divisionName)),
-                  ].join(" + ");
-                  const couples = [...new Set(heat.entries.map((entry) => String(entry.bib)))].join(
-                    ", ",
-                  );
+                  const divisionNames = [...new Set(heat.entries.map((entry) => entry.divisionName))];
+                  const coupleCount = new Set(heat.entries.map((entry) => entry.bib)).size;
                   return (
-                    <TableRow key={heat.id}>
+                    <TableRow
+                      key={heat.id}
+                      hover
+                      sx={{ cursor: "pointer" }}
+                      onClick={() => setBreakdownHeatId(heat.id)}
+                      selected={breakdownHeatId === heat.id}
+                    >
                       <TableCell>{heat.number}</TableCell>
+                      <TableCell>{heat.styleAbbrev}</TableCell>
                       <TableCell>
-                        {heat.styleName} ({heat.styleAbbrev})
+                        {divisionNames.length <= 2
+                          ? divisionNames.join(" + ") || "—"
+                          : `${divisionNames.length} divisions`}
                       </TableCell>
-                      <TableCell>{divisionsLabel || "—"}</TableCell>
-                      <TableCell>{couples}</TableCell>
+                      <TableCell>{coupleCount}</TableCell>
                     </TableRow>
                   );
                 })}
@@ -314,7 +317,7 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
               </Box>
             ) : (
               <Typography color="text.secondary">
-                Pick a heat to see each division’s competitors and bibs.
+                Select a heat above, or click a row in the table.
               </Typography>
             )}
           </Box>

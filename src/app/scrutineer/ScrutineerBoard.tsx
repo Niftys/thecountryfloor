@@ -253,8 +253,7 @@ export function ScrutineerBoard({ initial }: Props) {
             {view.sessionName} · {view.divisionName}
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            Hover a judge mark and click the pen to edit. You can always restore the judge’s original
-            mark.
+            Hover a mark and use the pen to edit.
           </Typography>
         </Box>
         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
@@ -299,7 +298,7 @@ export function ScrutineerBoard({ initial }: Props) {
             Judge progress
           </Typography>
           <Typography color="text.secondary" sx={{ mb: 1.5 }}>
-            Green = all judges submitted. Orange = still waiting. Scroll for later heats.
+            Green = submitted · Orange = waiting · Scroll for more
           </Typography>
           <Box
             sx={{
@@ -311,14 +310,19 @@ export function ScrutineerBoard({ initial }: Props) {
               pr: 0.5,
             }}
           >
-            {view.heats.map((heat) => (
-              <Chip
-                key={heat.id}
-                label={`H${heat.number} · ${heat.label} · ${heat.confirmed}/${heat.judges}`}
-                color={heat.complete ? "success" : "warning"}
-                sx={{ fontSize: "0.95rem", height: 40 }}
-              />
-            ))}
+            {view.heats.map((heat) => {
+              const style = heat.label.includes(" · ")
+                ? heat.label.slice(0, heat.label.indexOf(" · "))
+                : heat.label;
+              return (
+                <Chip
+                  key={heat.id}
+                  label={`H${heat.number} · ${style} · ${heat.confirmed}/${heat.judges}`}
+                  color={heat.complete ? "success" : "warning"}
+                  sx={{ fontSize: "0.95rem", height: 40 }}
+                />
+              );
+            })}
           </Box>
         </CardContent>
       </Card>
@@ -434,9 +438,7 @@ export function ScrutineerBoard({ initial }: Props) {
           >
             <Box>
               <Typography variant="h5">Dance sheets</Typography>
-              <Typography color="text.secondary">
-                Hover a cell for the pen, then click to edit.
-              </Typography>
+              <Typography color="text.secondary">Click a mark to edit.</Typography>
             </Box>
             <TextField
               select

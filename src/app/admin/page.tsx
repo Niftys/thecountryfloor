@@ -78,11 +78,6 @@ export default async function AdminPage({ searchParams }: Props) {
       ]}
     >
       <Stack spacing={3}>
-        <Alert severity="info">
-          Use this page to turn competitions on/off, assign judges to a session, manage users, and
-          import CDD structure. Judges and scrutineers open their own views from the buttons above.
-        </Alert>
-
         {competition ? (
           <Suspense fallback={null}>
             <ScopePicker
@@ -105,9 +100,8 @@ export default async function AdminPage({ searchParams }: Props) {
             {competition ? (
               <Stack spacing={2}>
                 <Typography variant="h6">{competition.name}</Typography>
-                <Typography>
-                  {competition.dateLabel}
-                  {competition.location ? ` · ${competition.location}` : ""} · {competition.status}
+                <Typography color="text.secondary">
+                  {[competition.dateLabel, competition.location].filter(Boolean).join(" · ")}
                 </Typography>
                 <CompetitionActiveToggle
                   key={competition.id}
@@ -132,7 +126,7 @@ export default async function AdminPage({ searchParams }: Props) {
                     <Chip
                       key={division.id}
                       size="small"
-                      label={`${division.name} · ${division.scale} · Rule9 ${division.rule9Count}`}
+                      label={`${division.name} · ${division.scale}`}
                       color="primary"
                     />
                   ))}

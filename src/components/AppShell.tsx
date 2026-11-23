@@ -50,7 +50,10 @@ export function AppShell({ title, role, displayName, links = [], children }: Pro
               {title}
             </Typography>
             <Typography variant="body1" sx={{ opacity: 0.95 }}>
-              {displayName} · {ROLE_LABEL[role] ?? role}
+              {displayName}
+              {ROLE_LABEL[role] && title !== ROLE_LABEL[role]
+                ? ` · ${ROLE_LABEL[role]}`
+                : ""}
             </Typography>
           </Box>
           <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">

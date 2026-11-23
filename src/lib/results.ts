@@ -180,18 +180,14 @@ export async function buildAndCacheScrutineerView(input: {
 
   const heatStatuses: HeatStatus[] =
     live?.heats ??
-    heats.map((heat) => {
-      const divisions = [...new Set(heat.entries.map((entry) => entry.divisionName))];
-      const style = heat.styleName;
-      return {
-        id: heat.id,
-        number: heat.number,
-        label: divisions.length > 1 ? `${style} · ${divisions.join(" + ")}` : style,
-        confirmed: heat.confirmCount,
-        judges: judgeIds.length,
-        complete: judgeIds.length > 0 && heat.confirmCount >= judgeIds.length,
-      };
-    });
+    heats.map((heat) => ({
+      id: heat.id,
+      number: heat.number,
+      label: heat.styleAbbrev || heat.styleName,
+      confirmed: heat.confirmCount,
+      judges: judgeIds.length,
+      complete: judgeIds.length > 0 && heat.confirmCount >= judgeIds.length,
+    }));
 
   const sheetsByHeat = await Promise.all(
     heats.map(async (heat) => ({

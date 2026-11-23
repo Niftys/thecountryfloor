@@ -86,9 +86,7 @@ export function CompetitionOps() {
         />
       </Stack>
       <Typography variant="body2" color="text.secondary">
-        New competitions come from CDD import (<code>countryfloor.cdd.v1</code>, see{" "}
-        <code>cdd-samples/</code>). Import updates structure only and never overwrites confirmed
-        scores. Real vendor CDD files map in <code>src/lib/cdd/</code>.
+        Import updates structure only — confirmed scores are kept.
       </Typography>
       {message ? <Alert severity="success">{message}</Alert> : null}
       {heatWarns.length > 0 ? (

@@ -122,13 +122,13 @@ export async function rebuildSessionLive(competitionId: string, sessionId: strin
   const panel = new Set(session.judgeIds);
   const judgeCount = session.judgeIds.length;
   const liveHeats: LiveHeatStatus[] = heats.map((heat) => {
-    const divisions = [...new Set(heat.entries.map((entry) => entry.divisionName))];
-    const style = heat.styleName || `Heat ${heat.number}`;
+    const style = heat.styleAbbrev || heat.styleName || `H${heat.number}`;
     const confirmed = heat.confirmedJudgeIds.filter((id) => panel.has(id)).length;
     return {
       id: heat.id,
       number: heat.number,
-      label: divisions.length > 1 ? `${style} · ${divisions.join(" + ")}` : style,
+      // Keep short — full division lists belong in heat detail, not polling chips.
+      label: style,
       confirmed,
       judges: judgeCount,
       complete: judgeCount > 0 && confirmed >= judgeCount,

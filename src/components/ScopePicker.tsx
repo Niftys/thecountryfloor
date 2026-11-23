@@ -45,9 +45,6 @@ export function ScopePicker({
 
   return (
     <Stack spacing={1} sx={{ mb: 2 }}>
-      <Typography variant="body1" color="text.secondary" sx={{ fontWeight: 600 }}>
-        Choose what you are working on
-      </Typography>
       <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
         <FormControl sx={{ minWidth: 280, flex: 1 }} size="medium">
           <InputLabel id="competition-select">Competition</InputLabel>

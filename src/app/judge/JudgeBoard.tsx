@@ -487,11 +487,13 @@ export function JudgeBoard({
               </Typography>
               <Typography variant="h6" color="text.secondary">
                 Heat #{heat.number}
-                {heat.groups.length > 1
-                  ? ` · ${[...new Set(heat.groups.map((group) => group.divisionName))].join(" + ")}`
-                  : heat.groups[0]
-                    ? ` · ${heat.groups[0].divisionName}`
-                    : ""}
+                {(() => {
+                  const names = [...new Set(heat.groups.map((group) => group.divisionName))];
+                  if (names.length === 0) return "";
+                  if (names.length === 1) return ` · ${names[0]}`;
+                  if (names.length === 2) return ` · ${names.join(" + ")}`;
+                  return ` · ${names.length} divisions`;
+                })()}
               </Typography>
             </Box>
             <Button
@@ -514,18 +516,19 @@ export function JudgeBoard({
               Next
             </Button>
           </Stack>
-          <Alert severity="info" sx={{ mb: 1 }}>
-            Tap a medal for each couple
-            {heat.groups.some((group) => requiresPlacement(group.scale as Scale))
-              ? ", then pick place if two couples share a medal"
-              : ""}
-            . When finished, press <strong>Submit heat</strong> at the bottom.
-          </Alert>
           {heat.submitted ? (
-            <Alert severity="success">
-              This heat is locked. A scrutineer can still fix marks if needed.
+            <Alert severity="success" sx={{ mb: 1 }}>
+              Locked — already submitted
             </Alert>
-          ) : null}
+          ) : (
+            <Alert severity="info" sx={{ mb: 1 }}>
+              Tap a medal for each couple
+              {heat.groups.some((group) => requiresPlacement(group.scale as Scale))
+                ? ", then place if needed"
+                : ""}
+              . Submit at the bottom when done.
+            </Alert>
+          )}
           {!heat.submitted && dirty ? (
             <Alert severity="warning">You have changes that are not submitted yet.</Alert>
           ) : null}

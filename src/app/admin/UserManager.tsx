@@ -120,7 +120,7 @@ export function UserManager({ users, currentUserId }: Props) {
   return (
     <Stack spacing={2}>
       <Typography color="text.secondary">
-        Username is for login only. Display name is what appears on score sheets (they can differ).
+        Display name appears on score sheets.
       </Typography>
 
       <Stack
