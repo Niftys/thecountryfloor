@@ -882,6 +882,16 @@ export function JudgeBoard({
                       const medalColor = entry.medal ? MEDAL_COLORS[entry.medal] : null;
 
                       if (compact) {
+                        const actionSx = {
+                          flex: "0 0 auto",
+                          width: { xs: 76, sm: 88 },
+                          minHeight: { xs: 32, sm: 34 },
+                          height: { xs: 32, sm: 34 },
+                          px: 0.75,
+                          fontWeight: 800,
+                          fontSize: "0.72rem",
+                          textTransform: "none" as const,
+                        };
                         return (
                           <Box
                             key={entry.heatEntryId}
@@ -889,10 +899,11 @@ export function JudgeBoard({
                               flex: "1 1 0",
                               minHeight: 0,
                               display: "flex",
-                              flexDirection: "column",
-                              gap: 0.35,
+                              alignItems: "stretch",
+                              gap: 0.75,
                               px: 0.85,
-                              py: 0.4,
+                              py: 0.55,
+                              overflow: "hidden",
                               border: "2px solid",
                               borderColor: entry.scratched
                                 ? "error.light"
@@ -906,65 +917,42 @@ export function JudgeBoard({
                               boxShadow: medalColor ? `inset 3px 0 0 ${medalColor.bg}` : "none",
                             }}
                           >
-                            <Typography
-                              noWrap
-                              title={entry.name}
+                            <Box
                               sx={{
-                                fontWeight: 800,
-                                fontSize: "0.82rem",
-                                lineHeight: 1.15,
-                                letterSpacing: 0.1,
+                                width: { xs: 52, sm: 64, md: 72 },
                                 flexShrink: 0,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                bgcolor: "#0a0a0a",
+                                color: "#fff",
+                                borderRadius: 1.25,
+                                alignSelf: "stretch",
                               }}
                             >
-                              {entry.name}
-                            </Typography>
+                              <Typography
+                                sx={{
+                                  fontWeight: 900,
+                                  fontSize: { xs: "1.35rem", sm: "1.65rem", md: "1.85rem" },
+                                  lineHeight: 1,
+                                  fontVariantNumeric: "tabular-nums",
+                                }}
+                              >
+                                {entry.bib}
+                              </Typography>
+                            </Box>
 
                             <Box
                               sx={{
                                 flex: 1,
-                                minHeight: 0,
+                                minWidth: 0,
                                 display: "flex",
-                                alignItems: "stretch",
-                                gap: 0.75,
+                                flexDirection: "column",
+                                justifyContent: "center",
+                                gap: 0.4,
                               }}
                             >
-                              <Box
-                                sx={{
-                                  width: { xs: 52, sm: 64, md: 72 },
-                                  flexShrink: 0,
-                                  alignSelf: "stretch",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  bgcolor: "#0a0a0a",
-                                  color: "#fff",
-                                  borderRadius: 1.25,
-                                  minHeight: { xs: 44, sm: 52 },
-                                }}
-                              >
-                                <Typography
-                                  sx={{
-                                    fontWeight: 900,
-                                    fontSize: { xs: "1.35rem", sm: "1.65rem", md: "1.85rem" },
-                                    lineHeight: 1,
-                                    fontVariantNumeric: "tabular-nums",
-                                  }}
-                                >
-                                  {entry.bib}
-                                </Typography>
-                              </Box>
-
-                              <Box
-                                sx={{
-                                  flex: 1,
-                                  minWidth: 0,
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  gap: 0.35,
-                                  justifyContent: "center",
-                                }}
-                              >
+                              <Stack direction="row" spacing={0.5} alignItems="center">
                                 <ToggleButtonGroup
                                   exclusive
                                   size="small"
@@ -975,6 +963,8 @@ export function JudgeBoard({
                                   }}
                                   disabled={heat.submitted || entry.scratched}
                                   sx={{
+                                    flex: 1,
+                                    minWidth: 0,
                                     display: "flex",
                                     flexWrap: "nowrap",
                                     gap: 0.3,
@@ -998,8 +988,14 @@ export function JudgeBoard({
                                         sx={{
                                           flex: "1 1 0",
                                           minWidth: "0 !important",
-                                          minHeight: { xs: "30px !important", sm: "34px !important" },
-                                          height: { xs: "30px !important", sm: "34px !important" },
+                                          minHeight: {
+                                            xs: "30px !important",
+                                            sm: "34px !important",
+                                          },
+                                          height: {
+                                            xs: "30px !important",
+                                            sm: "34px !important",
+                                          },
                                           p: "2px !important",
                                           fontSize: {
                                             xs: "0.7rem !important",
@@ -1021,97 +1017,99 @@ export function JudgeBoard({
                                     );
                                   })}
                                 </ToggleButtonGroup>
-
-                                <Stack direction="row" spacing={0.5} alignItems="center">
-                                  {needsPlace ? (
-                                    <Select
-                                      size="small"
-                                      displayEmpty
-                                      value={
-                                        entry.scratched
-                                          ? ""
-                                          : entry.placement ?? (placeMax === 1 ? 1 : "")
-                                      }
-                                      disabled={
-                                        heat.submitted ||
-                                        entry.scratched ||
-                                        placeMax <= 1 ||
-                                        (!placeTied && Boolean(entry.medal))
-                                      }
-                                      onChange={(event) =>
-                                        updateEntry(
-                                          heat.id,
-                                          entry.heatEntryId,
-                                          { placement: Number(event.target.value) },
-                                          { reband: false },
-                                        )
-                                      }
-                                      sx={{
-                                        width: 58,
-                                        flexShrink: 0,
-                                        fontWeight: 800,
-                                        bgcolor: placeTied ? "#fff8e1" : "#fff",
-                                        "& .MuiSelect-select": { py: 0.35, px: 0.75 },
-                                      }}
-                                    >
-                                      <MenuItem value="" disabled>
-                                        #
+                                {needsPlace ? (
+                                  <Select
+                                    size="small"
+                                    displayEmpty
+                                    value={
+                                      entry.scratched
+                                        ? ""
+                                        : entry.placement ?? (placeMax === 1 ? 1 : "")
+                                    }
+                                    disabled={
+                                      heat.submitted ||
+                                      entry.scratched ||
+                                      placeMax <= 1 ||
+                                      (!placeTied && Boolean(entry.medal))
+                                    }
+                                    onChange={(event) =>
+                                      updateEntry(
+                                        heat.id,
+                                        entry.heatEntryId,
+                                        { placement: Number(event.target.value) },
+                                        { reband: false },
+                                      )
+                                    }
+                                    sx={{
+                                      width: 52,
+                                      flexShrink: 0,
+                                      fontWeight: 800,
+                                      bgcolor: placeTied ? "#fff8e1" : "#fff",
+                                      "& .MuiSelect-select": { py: 0.35, px: 0.75 },
+                                    }}
+                                  >
+                                    <MenuItem value="" disabled>
+                                      #
+                                    </MenuItem>
+                                    {placeOptions.map((place) => (
+                                      <MenuItem key={place} value={place}>
+                                        {place}
                                       </MenuItem>
-                                      {placeOptions.map((place) => (
-                                        <MenuItem key={place} value={place}>
-                                          {place}
-                                        </MenuItem>
-                                      ))}
-                                    </Select>
-                                  ) : null}
-                                  <Button
-                                    size="small"
-                                    variant={entry.notes.trim() ? "contained" : "outlined"}
-                                    color={entry.notes.trim() ? "primary" : "inherit"}
-                                    disabled={heat.submitted}
-                                    onClick={() =>
-                                      setNotesTarget({
-                                        heatId: heat.id,
-                                        entryId: entry.heatEntryId,
-                                        name: entry.name,
-                                        bib: entry.bib,
-                                        notes: entry.notes,
-                                      })
-                                    }
-                                    sx={{
-                                      flex: 1,
-                                      minHeight: 32,
-                                      fontWeight: 800,
-                                      fontSize: "0.75rem",
-                                      textTransform: "none",
-                                    }}
-                                  >
-                                    {entry.notes.trim() ? "Notes · edited" : "Notes"}
-                                  </Button>
-                                  <Button
-                                    size="small"
-                                    color={entry.scratched ? "success" : "error"}
-                                    variant="outlined"
-                                    disabled={heat.submitted}
-                                    sx={{
-                                      minWidth: 64,
-                                      minHeight: 32,
-                                      px: 0.75,
-                                      fontSize: "0.7rem",
-                                      fontWeight: 800,
-                                    }}
-                                    onClick={() =>
-                                      setScratchTarget({
-                                        heatId: heat.id,
-                                        entryId: entry.heatEntryId,
-                                        scratched: entry.scratched,
-                                      })
-                                    }
-                                  >
-                                    {entry.scratched ? "Unscratch" : "Scratch"}
-                                  </Button>
-                                </Stack>
-                              </Box>
+                                    ))}
+                                  </Select>
+                                ) : null}
+                              </Stack>
+
+                              <Stack direction="row" spacing={0.5} alignItems="center">
+                                <Typography
+                                  noWrap
+                                  title={entry.name}
+                                  sx={{
+                                    flex: 1,
+                                    minWidth: 0,
+                                    fontWeight: 800,
+                                    fontSize: { xs: "0.78rem", sm: "0.85rem" },
+                                    lineHeight: 1.2,
+                                    pr: 0.5,
+                                  }}
+                                >
+                                  {entry.name}
+                                </Typography>
+                                <Button
+                                  size="small"
+                                  variant={entry.notes.trim() ? "contained" : "outlined"}
+                                  color={entry.notes.trim() ? "primary" : "inherit"}
+                                  disabled={heat.submitted}
+                                  onClick={() =>
+                                    setNotesTarget({
+                                      heatId: heat.id,
+                                      entryId: entry.heatEntryId,
+                                      name: entry.name,
+                                      bib: entry.bib,
+                                      notes: entry.notes,
+                                    })
+                                  }
+                                  sx={actionSx}
+                                >
+                                  {entry.notes.trim() ? "Notes*" : "Notes"}
+                                </Button>
+                                <Button
+                                  size="small"
+                                  color={entry.scratched ? "success" : "error"}
+                                  variant="outlined"
+                                  disabled={heat.submitted}
+                                  onClick={() =>
+                                    setScratchTarget({
+                                      heatId: heat.id,
+                                      entryId: entry.heatEntryId,
+                                      scratched: entry.scratched,
+                                    })
+                                  }
+                                  sx={actionSx}
+                                >
+                                  {entry.scratched ? "Unscratch" : "Scratch"}
+                                </Button>
+                              </Stack>
                             </Box>
                           </Box>
                         );

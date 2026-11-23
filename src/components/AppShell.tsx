@@ -10,7 +10,6 @@ import { signOut } from "firebase/auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClientAuthGate } from "@/components/ClientAuthGate";
-import { ThemePrefsToggles } from "@/components/ThemePrefs";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { getClientAuth } from "@/lib/firebase/client";
 
@@ -95,7 +94,6 @@ export function AppShell({
             ) : null}
           </Box>
           <Stack direction="row" spacing={{ xs: 0.5, sm: 1 }} alignItems="center" useFlexGap flexWrap="wrap">
-            {!scoringFocus || !isPhone ? <ThemePrefsToggles /> : null}
             {links.map((link) => (
               <Button
                 key={link.href}
