@@ -25,7 +25,7 @@ export const COUPLES = [
   { bib: 279, name: "ANTHONY RIOJAS & ADRIANNE ZIARKOWSKI" },
 ] as const;
 
-/** Summary columns follow the exported sheet (includes VWZ as 0s). Floor heat order uses DANCE_STYLES. */
+/** Summary columns follow the exported sheet (includes VWZ as 0s). Floor order includes VWZ between NC2 and WLZ. */
 export const DANCES = [
   { name: "Triple Two", abbrev: "TR2", order: 1 },
   { name: "Polka", abbrev: "PLK", order: 2 },
@@ -38,16 +38,17 @@ export const DANCES = [
   { name: "West Coast Swing", abbrev: "WCS", order: 9 },
 ] as const;
 
-/** One heat = one song/style, in floor order. */
+/** One heat = one song/style, in floor order (VWZ between NC2 and WLZ). */
 export const HEATS: { number: number; abbrev: string }[] = [
   { number: 1, abbrev: "TR2" },
   { number: 2, abbrev: "NC2" },
-  { number: 3, abbrev: "WLZ" },
-  { number: 4, abbrev: "PLK" },
-  { number: 5, abbrev: "CHA" },
-  { number: 6, abbrev: "ECS" },
-  { number: 7, abbrev: "2ST" },
-  { number: 8, abbrev: "WCS" },
+  { number: 3, abbrev: "VWZ" },
+  { number: 4, abbrev: "WLZ" },
+  { number: 5, abbrev: "PLK" },
+  { number: 6, abbrev: "CHA" },
+  { number: 7, abbrev: "ECS" },
+  { number: 8, abbrev: "2ST" },
+  { number: 9, abbrev: "WCS" },
 ];
 
 type Mark = [medal: string, place: number];

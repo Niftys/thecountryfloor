@@ -56,6 +56,12 @@ export function dash(values: number[]): string {
   return values.join("-");
 }
 
+/** Dance place for sheets/summary (supports shared halves like 2.5). */
+export function formatDancePlace(place: number | null | undefined): string {
+  if (place == null || place <= 0) return "0.0";
+  return Number.isInteger(place) ? String(place) : place.toFixed(1);
+}
+
 /**
  * Middle mark after sorting best to worst.
  * 5 judges → index 2 (3rd). 6 judges → index 3 (4th). 7 judges → index 3 (4th).
@@ -85,20 +91,8 @@ function compareSide(a: number[], b: number[]): number {
   return 0;
 }
 
-function headToHead(a: MarkInput[], b: MarkInput[]): number {
-  const bByJudge = new Map(b.map((mark) => [mark.judgeId, mark.placement]));
-  let aWins = 0;
-  let bWins = 0;
-  for (const mark of a) {
-    const other = bByJudge.get(mark.judgeId);
-    if (other == null) continue;
-    if (mark.placement < other) aWins += 1;
-    else if (other < mark.placement) bWins += 1;
-  }
-  return aWins - bWins;
-}
-
-function compareCouples(a: CoupleInput, b: CoupleInput): number {
+/** Rules 1–5 only (majority mark, size, sum, look-ahead, look-back). */
+function compareRules1to5(a: CoupleInput, b: CoupleInput): number {
   const aPlaces = analyze(a.marks.map((mark) => mark.placement));
   const bPlaces = analyze(b.marks.map((mark) => mark.placement));
   if (aPlaces.mark !== bPlaces.mark) return aPlaces.mark - bPlaces.mark;
@@ -106,9 +100,68 @@ function compareCouples(a: CoupleInput, b: CoupleInput): number {
   if (aPlaces.sum !== bPlaces.sum) return aPlaces.sum - bPlaces.sum;
   const ahead = compareSide(aPlaces.lookAhead, bPlaces.lookAhead);
   if (ahead !== 0) return ahead;
-  const behind = compareSide(aPlaces.lookBack, bPlaces.lookBack);
-  if (behind !== 0) return behind;
-  return -headToHead(a.marks, b.marks);
+  return compareSide(aPlaces.lookBack, bPlaces.lookBack);
+}
+
+/**
+ * Rule 6: among contestants with identical Rules 1–5 marks, loss percentage
+ * from head-to-head judge marks (ties count as ½ win + ½ loss). Lower is better.
+ */
+export function lossPercentage(coupleId: string, group: CoupleInput[]): number {
+  const me = group.find((couple) => couple.id === coupleId);
+  if (!me) return 1;
+  let wins = 0;
+  let losses = 0;
+  let ties = 0;
+  for (const other of group) {
+    if (other.id === coupleId) continue;
+    const otherByJudge = new Map(other.marks.map((mark) => [mark.judgeId, mark.placement]));
+    for (const mark of me.marks) {
+      const theirs = otherByJudge.get(mark.judgeId);
+      if (theirs == null) continue;
+      if (mark.placement < theirs) wins += 1;
+      else if (theirs < mark.placement) losses += 1;
+      else ties += 1;
+    }
+  }
+  const games = wins + losses + ties;
+  if (games === 0) return 0.5;
+  return (losses + ties * 0.5) / games;
+}
+
+/**
+ * Assign dance places for a Rules 1–5 tied group using Rule 6 re-visitation.
+ * Final identical loss% shares placements; carry-forward value is the average
+ * of the shared slots (e.g. 2nd+3rd → 2.5 for overall Rule 9).
+ */
+export function assignPlacesWithRule6(
+  group: CoupleInput[],
+  startingPlace: number,
+): Map<string, number> {
+  const places = new Map<string, number>();
+  let remaining = [...group];
+  let nextPlace = startingPlace;
+
+  while (remaining.length > 0) {
+    const rates = remaining.map((couple) => ({
+      id: couple.id,
+      loss: lossPercentage(couple.id, remaining),
+    }));
+    rates.sort((a, b) => a.loss - b.loss || a.id.localeCompare(b.id));
+    const best = rates[0]!.loss;
+    const winners = rates.filter((row) => Math.abs(row.loss - best) < 1e-9);
+    const start = nextPlace;
+    const end = nextPlace + winners.length - 1;
+    const carry = (start + end) / 2;
+    for (const winner of winners) {
+      places.set(winner.id, carry);
+    }
+    nextPlace += winners.length;
+    const winnerIds = new Set(winners.map((row) => row.id));
+    remaining = remaining.filter((couple) => !winnerIds.has(couple.id));
+  }
+
+  return places;
 }
 
 export function requiresPlacement(scale: Scale): boolean {
@@ -163,19 +216,34 @@ export function rankDance(couples: CoupleInput[], scale: Scale): CoupleBreakdown
         }))
       : couples;
 
-  const ranked = prepared.filter((couple) => couple.marks.length > 0);
-  ranked.sort((a, b) => compareCouples(a, b) || a.id.localeCompare(b.id));
+  const active = prepared.filter((couple) => couple.marks.length > 0);
+  active.sort((a, b) => compareRules1to5(a, b) || a.id.localeCompare(b.id));
 
   const places = new Map<string, number>();
-  let place = 1;
-  for (let i = 0; i < ranked.length; i++) {
-    if (i > 0 && compareCouples(ranked[i - 1], ranked[i]) !== 0) {
-      place = i + 1;
+  let index = 0;
+  while (index < active.length) {
+    let end = index + 1;
+    while (end < active.length && compareRules1to5(active[index]!, active[end]!) === 0) {
+      end += 1;
     }
-    places.set(ranked[i].id, place);
+    const group = active.slice(index, end);
+    const startingPlace = index + 1;
+    if (group.length === 1) {
+      places.set(group[0]!.id, startingPlace);
+    } else {
+      const assigned = assignPlacesWithRule6(group, startingPlace);
+      for (const [id, place] of assigned) places.set(id, place);
+    }
+    index = end;
   }
 
-  return ranked.map((couple) => {
+  const orderedIds = [...places.entries()]
+    .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+    .map(([id]) => id);
+  const byId = new Map(active.map((couple) => [couple.id, couple]));
+
+  return orderedIds.map((id) => {
+    const couple = byId.get(id)!;
     const placements = analyze(couple.marks.map((mark) => mark.placement));
     const medals = analyze(couple.marks.map((mark) => medalPoints(mark.medal, scale)));
     return {

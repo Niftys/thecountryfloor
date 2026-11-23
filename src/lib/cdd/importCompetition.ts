@@ -1,7 +1,7 @@
 import { adminDb } from "@/lib/firebase/admin";
 import { parseCddPayload } from "@/lib/cdd/adapter";
 import type { CddCompetitionPayload } from "@/lib/cdd/types";
-import { DANCE_STYLES } from "@/lib/dances";
+import { DANCE_STYLES, danceOrder } from "@/lib/dances";
 import { rebuildSessionLive } from "@/lib/store/competitions";
 import { competitionRef, divisionPath, heatPath, sessionPath } from "@/lib/store/paths";
 import { findUserByUsername } from "@/lib/store/users";
@@ -27,6 +27,7 @@ export async function importCddCompetition(raw: unknown) {
   if (!parsed.ok) return parsed;
 
   const data: CddCompetitionPayload = parsed.data;
+  const heatingNotes = parsed.heatingWarnings;
   const existingSnap = data.competition.cddId
     ? await adminDb
         .collection("competitions")
@@ -58,16 +59,18 @@ export async function importCddCompetition(raw: unknown) {
 
   for (const div of data.divisions) {
     const divisionId = adminDb.collection("x").doc().id;
-    const dances = div.dances.map((dance, index) => {
-      const id = `${divisionId}_d_${dance.abbrev}`;
-      danceIds.set(`${div.name}:${dance.abbrev}`, id);
-      return {
-        id,
-        name: dance.name,
-        abbrev: dance.abbrev,
-        sortOrder: dance.sortOrder ?? index + 1,
-      };
-    });
+    const dances = [...div.dances]
+      .map((dance, index) => {
+        const id = `${divisionId}_d_${dance.abbrev}`;
+        danceIds.set(`${div.name}:${dance.abbrev}`, id);
+        return {
+          id,
+          name: dance.name,
+          abbrev: dance.abbrev,
+          sortOrder: dance.sortOrder ?? danceOrder(dance.abbrev) || index + 1,
+        };
+      })
+      .sort((a, b) => a.sortOrder - b.sortOrder);
     const competitors = div.competitors.map((couple) => {
       const id = couple.cddId ?? `${divisionId}_c_${couple.bib}`;
       competitorIds.set(`${div.name}:${couple.bib}`, id);
@@ -165,5 +168,5 @@ export async function importCddCompetition(raw: unknown) {
     await rebuildSessionLive(competitionId, sessionId);
   }
 
-  return { ok: true as const, competitionId };
+  return { ok: true as const, competitionId, heatingWarnings: heatingNotes };
 }

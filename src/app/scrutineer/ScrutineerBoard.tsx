@@ -18,7 +18,7 @@ import Typography from "@mui/material/Typography";
 import { useEffect, useState } from "react";
 import { useFirestoreDoc } from "@/hooks/useFirestoreDoc";
 import type { ScrutineerView } from "@/lib/results";
-import { COUPLES_SCALE, PROAM_SCALE, requiresPlacement } from "@/lib/scoring";
+import { COUPLES_SCALE, PROAM_SCALE, formatDancePlace, requiresPlacement } from "@/lib/scoring";
 import { divisionResultsPath, sessionLivePath } from "@/lib/store/paths";
 import type { SessionLiveDoc } from "@/lib/store/types";
 
@@ -282,7 +282,7 @@ export function ScrutineerBoard({ initial }: Props) {
                             : undefined
                         }
                       >
-                        {place.place || "0.0"}
+                        {formatDancePlace(place.place)}
                       </TableCell>
                     ))}
                     <TableCell
@@ -419,7 +419,7 @@ export function ScrutineerBoard({ initial }: Props) {
                       <TableCell>{row.lookAhead}</TableCell>
                       <TableCell>{row.lookBack}</TableCell>
                       <TableCell>{row.medal}</TableCell>
-                      <TableCell>{row.place}</TableCell>
+                      <TableCell>{formatDancePlace(row.place)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

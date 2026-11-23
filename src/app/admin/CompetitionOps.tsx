@@ -11,6 +11,7 @@ export function CompetitionOps() {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState("");
+  const [heatWarns, setHeatWarns] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -33,6 +34,7 @@ export function CompetitionOps() {
   async function importCdd(file: File) {
     setBusy(true);
     setMessage("");
+    setHeatWarns([]);
     setError("");
     try {
       const raw = JSON.parse(await file.text());
@@ -41,12 +43,17 @@ export function CompetitionOps() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(raw),
       });
-      const body = (await response.json()) as { error?: string; competitionId?: string };
+      const body = (await response.json()) as {
+        error?: string;
+        competitionId?: string;
+        heatingWarnings?: string[];
+      };
       if (!response.ok) {
         setError(body.error ?? "Import failed.");
         return;
       }
       setMessage("CDD structure imported (scores preserved).");
+      setHeatWarns(body.heatingWarnings ?? []);
       if (body.competitionId) router.push(`/admin?competitionId=${body.competitionId}`);
       router.refresh();
     } catch {
@@ -84,6 +91,9 @@ export function CompetitionOps() {
         scores. Real vendor CDD files map in <code>src/lib/cdd/</code>.
       </Typography>
       {message ? <Alert severity="success">{message}</Alert> : null}
+      {heatWarns.length > 0 ? (
+        <Alert severity="warning">{heatWarns.join(" ")}</Alert>
+      ) : null}
       {error ? <Alert severity="error">{error}</Alert> : null}
     </Stack>
   );

@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DANCES, DIVISION, JUDGES, MARKS } from "./sampleData";
+import { heatingWarnings } from "./dances";
 import {
+  assignPlacesWithRule6,
   dash,
+  lossPercentage,
   medalPlacementConflict,
   rankDance,
   medalBandPlacements,
@@ -149,6 +152,65 @@ test("Rule 10 breaks Rule 9 ties by head-to-head dance places", () => {
   assert.equal(ranked.find((row) => row.id === "b")!.place, 2);
   assert.equal(ranked.find((row) => row.id === "c")!.place, 3);
   assert.notEqual(ranked.find((row) => row.id === "a")!.rule10Place, "--");
+});
+
+test("Rule 6 breaks Rules 1–5 ties by loss%; identical loss% shares average place", () => {
+  // Same ordered marks (1-2-3) so Rules 1–5 tie; head-to-head favors b.
+  const tiedGroup: CoupleInput[] = [
+    {
+      id: "a",
+      marks: [
+        { judgeId: "j1", medal: "H", placement: 1 },
+        { judgeId: "j2", medal: "H", placement: 2 },
+        { judgeId: "j3", medal: "H", placement: 3 },
+      ],
+    },
+    {
+      id: "b",
+      marks: [
+        { judgeId: "j1", medal: "H", placement: 3 },
+        { judgeId: "j2", medal: "H", placement: 1 },
+        { judgeId: "j3", medal: "H", placement: 2 },
+      ],
+    },
+  ];
+  assert.ok(lossPercentage("b", tiedGroup) < lossPercentage("a", tiedGroup));
+  const broken = rankDance(tiedGroup, "COUPLES");
+  assert.equal(broken.find((row) => row.id === "b")!.place, 1);
+  assert.equal(broken.find((row) => row.id === "a")!.place, 2);
+
+  const identical: CoupleInput[] = [
+    {
+      id: "x",
+      marks: [
+        { judgeId: "j1", medal: "H", placement: 1 },
+        { judgeId: "j2", medal: "H", placement: 2 },
+        { judgeId: "j3", medal: "H", placement: 3 },
+      ],
+    },
+    {
+      id: "y",
+      marks: [
+        { judgeId: "j1", medal: "H", placement: 1 },
+        { judgeId: "j2", medal: "H", placement: 2 },
+        { judgeId: "j3", medal: "H", placement: 3 },
+      ],
+    },
+  ];
+  assert.equal(lossPercentage("x", identical), lossPercentage("y", identical));
+  const shared = assignPlacesWithRule6(identical, 2);
+  assert.equal(shared.get("x"), 2.5);
+  assert.equal(shared.get("y"), 2.5);
+  assert.equal(rule9Total([2.5, 1], 2), 3.5);
+});
+
+test("heatingWarnings flags non-contiguous multi-heats and oversized imbalance", () => {
+  const notes = heatingWarnings([
+    { number: 1, divisionIds: ["Open"], size: 4 },
+    { number: 3, divisionIds: ["Open"], size: 2 },
+  ]);
+  assert.ok(notes.some((note) => note.includes("contiguous")));
+  assert.ok(notes.some((note) => note.includes("more than 1")));
 });
 
 test("medalBandPlacements auto-fills uniques and clears ties with skipped places", () => {

@@ -13,6 +13,7 @@ import { Suspense } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ScopePicker } from "@/components/ScopePicker";
 import { requireRole } from "@/lib/auth";
+import { heatingWarnings } from "@/lib/dances";
 import {
   listCompetitions,
   listDivisions,
@@ -39,6 +40,13 @@ export default async function AdminPage({ searchParams }: Props) {
     sessions.find((item) => item.id === params.sessionId) ?? sessions[0] ?? null;
   const divisions = competition ? await listDivisions(competition.id) : [];
   const heats = competition && session ? await listHeats(competition.id, session.id) : [];
+  const heatNotes = heatingWarnings(
+    heats.map((heat) => ({
+      number: heat.number,
+      divisionIds: [...new Set(heat.entries.map((entry) => entry.divisionName))],
+      size: new Set(heat.entries.map((entry) => entry.bib)).size,
+    })),
+  );
   const users = await listUsers();
   const judgeUsers = users
     .filter((row) => row.role === "JUDGE")
@@ -183,6 +191,11 @@ export default async function AdminPage({ searchParams }: Props) {
             <Typography variant="h5" gutterBottom>
               Session · {session?.name ?? "—"}
             </Typography>
+            {heatNotes.length > 0 ? (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                {heatNotes.join(" ")}
+              </Alert>
+            ) : null}
             <Table size="small">
               <TableHead>
                 <TableRow>

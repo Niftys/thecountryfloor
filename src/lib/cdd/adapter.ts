@@ -1,4 +1,4 @@
-import { heatStyleConflict } from "../dances";
+import { heatStyleConflict, heatingWarnings, type HeatComposition } from "../dances";
 import { dash, type CoupleBreakdown } from "../scoring";
 import type { CddCompetitionPayload } from "./types";
 
@@ -67,7 +67,9 @@ export function danceRowFromBreakdown(
   };
 }
 
-export function parseCddPayload(raw: unknown): { ok: true; data: CddCompetitionPayload } | { ok: false; error: string } {
+export function parseCddPayload(
+  raw: unknown,
+): { ok: true; data: CddCompetitionPayload; heatingWarnings: string[] } | { ok: false; error: string } {
   if (!raw || typeof raw !== "object") return { ok: false, error: "Payload must be a JSON object." };
   const data = raw as CddCompetitionPayload;
   if (data.format !== "countryfloor.cdd.v1") {
@@ -82,16 +84,21 @@ export function parseCddPayload(raw: unknown): { ok: true; data: CddCompetitionP
   }
   if (!Array.isArray(data.sessions)) return { ok: false, error: "sessions must be an array." };
 
+  const compositions: HeatComposition[] = [];
   for (const session of data.sessions) {
     for (const heat of session.heats ?? []) {
-      const abbrevs = (heat.entries ?? []).map(() => heat.styleAbbrev);
-      const conflict = heatStyleConflict(abbrevs.length ? [heat.styleAbbrev] : []);
       if (!heat.styleAbbrev) return { ok: false, error: `Heat ${heat.number} needs styleAbbrev.` };
-      void conflict;
+      const conflict = heatStyleConflict([heat.styleAbbrev]);
+      if (conflict) return { ok: false, error: conflict };
+      compositions.push({
+        number: heat.number,
+        divisionIds: [...new Set((heat.entries ?? []).map((entry) => entry.divisionName))],
+        size: (heat.entries ?? []).length,
+      });
     }
   }
 
-  return { ok: true, data };
+  return { ok: true, data, heatingWarnings: heatingWarnings(compositions) };
 }
 
 /** Placeholder for vendor CDD binary/XML — replace when you have samples. */

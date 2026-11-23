@@ -14,6 +14,7 @@ test("parseCddPayload accepts countryfloor.cdd.v1 sample", () => {
   if (parsed.ok) {
     assert.equal(parsed.data.competition.name, "CDD Import Demo");
     assert.equal(parsed.data.sessions[0].heats[0].styleAbbrev, "WLZ");
+    assert.ok(Array.isArray(parsed.heatingWarnings));
   }
 });
 
