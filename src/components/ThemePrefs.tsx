@@ -99,23 +99,33 @@ export function ThemePrefsToggles() {
   return (
     <>
       <FormControlLabel
-        sx={{ color: "inherit", mr: 0.5, "& .MuiFormControlLabel-label": { fontSize: "0.95rem" } }}
+        sx={{
+          color: "inherit",
+          mr: 0.5,
+          "& .MuiFormControlLabel-label": { fontSize: "1.05rem", fontWeight: 700 },
+        }}
         control={
           <Switch
             color="default"
             checked={prefs.largeType}
             onChange={(event) => setPrefs({ ...prefs, largeType: event.target.checked })}
+            inputProps={{ "aria-label": "Larger text" }}
           />
         }
-        label="Large type"
+        label="Bigger text"
       />
       <FormControlLabel
-        sx={{ color: "inherit", mr: 1, "& .MuiFormControlLabel-label": { fontSize: "0.95rem" } }}
+        sx={{
+          color: "inherit",
+          mr: 1,
+          "& .MuiFormControlLabel-label": { fontSize: "1.05rem", fontWeight: 700 },
+        }}
         control={
           <Switch
             color="default"
             checked={prefs.highContrast}
             onChange={(event) => setPrefs({ ...prefs, highContrast: event.target.checked })}
+            inputProps={{ "aria-label": "High contrast" }}
           />
         }
         label="High contrast"

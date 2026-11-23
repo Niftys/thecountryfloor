@@ -74,8 +74,8 @@ export default async function AdminPage({ searchParams }: Props) {
     >
       <Stack spacing={3}>
         <Alert severity="info">
-          Data is in Cloud Firestore. New competitions come from CDD import. Seed with{" "}
-          <code>npm run seed</code> against emulators or your Firebase project.
+          Use this page to turn competitions on/off, assign judges to a session, manage users, and
+          import CDD structure. Judges and scrutineers open their own views from the buttons above.
         </Alert>
 
         {competition ? (

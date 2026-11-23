@@ -16,8 +16,8 @@ import { authEmailForUsername } from "@/lib/firebase/usernames";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("demo12");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -36,7 +36,7 @@ export default function LoginPage() {
       });
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok) {
-        setError(body?.error ?? "Could not start session.");
+        setError(body?.error ?? "Could not start your session. Try again.");
         setBusy(false);
         return;
       }
@@ -46,13 +46,15 @@ export default function LoginPage() {
       const code =
         err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
       if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") {
-        setError("Username or password is wrong.");
+        setError("That username or password is not correct.");
       } else if (code === "auth/unauthorized-domain") {
-        setError("This site’s domain is not authorized in Firebase Auth.");
+        setError("This website is not allowed to sign in yet. Ask an admin to authorize the domain.");
       } else if (code === "auth/api-key-not-valid" || code === "auth/invalid-api-key") {
-        setError("Firebase API key is missing or invalid on this deploy.");
+        setError("Sign-in is misconfigured (API key). Ask an admin for help.");
+      } else if (code === "auth/too-many-requests") {
+        setError("Too many attempts. Wait a minute, then try again.");
       } else {
-        setError(code ? `Sign-in failed (${code}).` : "Sign-in failed.");
+        setError(code ? `Sign-in failed (${code}).` : "Sign-in failed. Check your connection and try again.");
       }
       setBusy(false);
     }
@@ -68,23 +70,32 @@ export default function LoginPage() {
         bgcolor: "background.default",
       }}
     >
-      <Card sx={{ width: "100%", maxWidth: 520 }}>
-        <CardContent sx={{ p: 4 }}>
+      <Card sx={{ width: "100%", maxWidth: 560, boxShadow: 4 }}>
+        <CardContent sx={{ p: { xs: 3, sm: 4.5 } }}>
           <Stack spacing={3} component="form" onSubmit={onSubmit}>
             <Box>
-              <Typography variant="h4">Countryfloor</Typography>
-              <Typography color="text.secondary">
-                ACDA judging for tablets. Sample logins use password <strong>demo12</strong>.
+              <Typography variant="h4" component="h1">
+                Countryfloor
+              </Typography>
+              <Typography color="text.secondary" sx={{ mt: 1, fontSize: "1.15rem" }}>
+                Sign in with the username and password your admin gave you.
               </Typography>
             </Box>
-            {error ? <Alert severity="error">{error}</Alert> : null}
+            {error ? (
+              <Alert severity="error" sx={{ fontSize: "1.15rem" }}>
+                {error}
+              </Alert>
+            ) : null}
             <TextField
               label="Username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
               autoComplete="username"
+              autoFocus
               fullWidth
               required
+              inputProps={{ style: { fontSize: "1.25rem", paddingTop: 16, paddingBottom: 16 } }}
+              InputLabelProps={{ sx: { fontSize: "1.15rem" } }}
             />
             <TextField
               label="Password"
@@ -94,14 +105,18 @@ export default function LoginPage() {
               autoComplete="current-password"
               fullWidth
               required
+              inputProps={{ style: { fontSize: "1.25rem", paddingTop: 16, paddingBottom: 16 } }}
+              InputLabelProps={{ sx: { fontSize: "1.15rem" } }}
             />
-            <Button type="submit" variant="contained" disabled={busy} fullWidth>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={busy}
+              fullWidth
+              sx={{ minHeight: 64, fontSize: "1.35rem" }}
+            >
               {busy ? "Signing in…" : "Sign in"}
             </Button>
-            <Typography variant="body2" color="text.secondary">
-              Try <code>admin</code>, <code>scrutineer</code>, or a judge login such as{" "}
-              <code>d.appel</code>.
-            </Typography>
           </Stack>
         </CardContent>
       </Card>

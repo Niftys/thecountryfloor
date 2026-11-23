@@ -202,48 +202,68 @@ export function ScrutineerBoard({ initial }: Props) {
     <Stack spacing={3}>
       <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2}>
         <Box>
-          <Typography variant="h5">{view.competition.name}</Typography>
-          <Typography color="text.secondary">
+          <Typography variant="h5" component="h2">
+            {view.competition.name}
+          </Typography>
+          <Typography color="text.secondary" variant="h6" sx={{ fontWeight: 600 }}>
             {view.sessionName} · {view.divisionName}
           </Typography>
+          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+            Tap any red or judge mark on a dance sheet to change it. You can always restore the
+            judge’s original mark.
+          </Typography>
         </Box>
-        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-          <Chip label={liveLabel} color="success" variant="outlined" />
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
           <Chip
-            label={view.provisional ? "Provisional results" : "Final panel"}
+            label={liveLabel === "Live" ? "Updating live" : liveLabel}
+            color="success"
+            variant="outlined"
+          />
+          <Chip
+            label={view.provisional ? "Not final yet" : "Panel complete"}
             color={view.provisional ? "warning" : "success"}
           />
           <Chip
-            label={view.sessionComplete ? "Session complete" : "Session open"}
+            label={view.sessionComplete ? "All heats done" : "Heats still open"}
             color={view.sessionComplete ? "success" : "default"}
           />
           <Button variant="outlined" onClick={downloadPacket}>
-            Export division JSON
+            Download results file
           </Button>
         </Stack>
       </Stack>
 
       {listenerError ? (
         <Alert severity="error">
-          Live listener error: {listenerError}. Sign out and back in, or check Firebase Auth
-          authorized domains / API key.
+          Live updates are blocked: {listenerError}. Sign out and sign back in. If it continues,
+          ask an admin to check Firebase authorized domains.
         </Alert>
       ) : null}
       {message ? <Alert severity="success">{message}</Alert> : null}
       {error && !edit ? <Alert severity="error">{error}</Alert> : null}
 
+      {view.provisional ? (
+        <Alert severity="warning">
+          Rankings below may still change until every judge has submitted every heat for this
+          division.
+        </Alert>
+      ) : null}
+
       <Card>
         <CardContent>
           <Typography variant="h5" gutterBottom>
-            Polling board
+            Judge progress
+          </Typography>
+          <Typography color="text.secondary" sx={{ mb: 1.5 }}>
+            Green = all judges submitted. Orange = still waiting.
           </Typography>
           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
             {view.heats.map((heat) => (
               <Chip
                 key={heat.id}
-                label={`Heat ${heat.number} · ${heat.label} · ${heat.confirmed}/${heat.judges}`}
+                label={`Heat ${heat.number} · ${heat.label} · ${heat.confirmed} of ${heat.judges} judges`}
                 color={heat.complete ? "success" : "warning"}
-                sx={{ fontSize: "1rem", height: 40 }}
+                sx={{ fontSize: "1.05rem", height: 48, px: 0.5 }}
               />
             ))}
           </Stack>
@@ -253,10 +273,10 @@ export function ScrutineerBoard({ initial }: Props) {
       <Card>
         <CardContent>
           <Typography variant="h5" gutterBottom>
-            Alerts
+            Things to check
           </Typography>
           {view.alerts.length === 0 ? (
-            <Alert severity="success">No alerts.</Alert>
+            <Alert severity="success">Nothing unusual right now.</Alert>
           ) : (
             <Stack spacing={1}>
               {view.alerts.map((alert) => (
@@ -272,11 +292,10 @@ export function ScrutineerBoard({ initial }: Props) {
       <Card>
         <CardContent>
           <Typography variant="h5" gutterBottom>
-            {view.divisionName} summary
+            {view.divisionName} — overall places
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Red cells mean a scrutineer changed at least one judge mark for that dance.
-            {view.provisional ? " Rankings are provisional until every heat’s panel confirms." : ""}
+          <Typography color="text.secondary" sx={{ mb: 1.5 }}>
+            Pink / red highlight means a scrutineer changed at least one mark for that dance.
           </Typography>
           <Box sx={{ overflowX: "auto" }}>
             <Table size="small">
@@ -339,13 +358,14 @@ export function ScrutineerBoard({ initial }: Props) {
         <Card key={dance.abbrev}>
           <CardContent>
             <Typography variant="h5" gutterBottom>
-              {dance.name} ({dance.abbrev})
+              {dance.name}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              Tap a judge mark to edit it (medal, place, scratch, notes).
+            <Typography color="text.secondary" sx={{ mb: 1.5 }}>
+              Tap a judge’s medal/place cell to edit. Use <strong>Restore judge mark</strong> if you
+              need to undo.
             </Typography>
             <Box sx={{ overflowX: "auto" }}>
-              <Table size="small">
+              <Table size="medium">
                 <TableHead>
                   <TableRow>
                     <TableCell>Comp #</TableCell>
@@ -381,23 +401,32 @@ export function ScrutineerBoard({ initial }: Props) {
                             }}
                             sx={{
                               cursor: cell ? "pointer" : "default",
+                              minWidth: 88,
+                              minHeight: 72,
+                              py: 1.5,
                               ...(cell?.overridden
                                 ? { color: "error.main", fontWeight: 800, bgcolor: "#ffebee" }
                                 : cell
-                                  ? { "&:hover": { bgcolor: "action.hover" } }
+                                  ? {
+                                      bgcolor: "#f7fafc",
+                                      "&:hover": { bgcolor: "#e3f2fd", outline: "2px solid #1565c0" },
+                                    }
                                   : undefined),
                             }}
                           >
                             {cell ? (
                               <Box>
-                                <Typography fontWeight={700} color="inherit">
-                                  {cell.scratched ? "SCR" : cell.medal || "—"}
+                                <Typography fontWeight={800} fontSize="1.2rem" color="inherit">
+                                  {cell.scratched ? "SCRATCH" : cell.medal || "—"}
                                 </Typography>
                                 {!cell.scratched && cell.placement != null ? (
-                                  <Typography variant="body2" color="inherit">
-                                    {cell.placement}
+                                  <Typography fontWeight={700} color="inherit">
+                                    Place {cell.placement}
                                   </Typography>
                                 ) : null}
+                                <Typography variant="caption" color="text.secondary" display="block">
+                                  Tap to edit
+                                </Typography>
                               </Box>
                             ) : (
                               "—"
@@ -425,7 +454,10 @@ export function ScrutineerBoard({ initial }: Props) {
       <Card>
         <CardContent>
           <Typography variant="h5" gutterBottom>
-            Audit trail
+            Change history
+          </Typography>
+          <Typography color="text.secondary" sx={{ mb: 1.5 }}>
+            Every scrutineer edit is listed here, including restores back to the judge’s mark.
           </Typography>
           <Box sx={{ overflowX: "auto" }}>
             <Table size="small">

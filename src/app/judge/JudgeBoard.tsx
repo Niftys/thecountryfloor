@@ -445,7 +445,7 @@ export function JudgeBoard({
                 return (
                   <MenuItem key={item.id} value={item.number}>
                     Heat {item.number} · {style}
-                    {item.submitted ? " ✓" : ""}
+                    {item.submitted ? " · done" : ""}
                   </MenuItem>
                 );
               })}
@@ -462,14 +462,30 @@ export function JudgeBoard({
               disabled={!prevHeat}
               onClick={() => prevHeat && requestHeatChange(prevHeat.number)}
               aria-label="Previous heat"
-              sx={{ minWidth: 88, minHeight: 88, fontSize: "3rem", lineHeight: 1, px: 2 }}
+              sx={{
+                minWidth: { xs: 72, sm: 120 },
+                minHeight: 88,
+                fontSize: { xs: "1.1rem", sm: "1.25rem" },
+                lineHeight: 1.15,
+                px: 2,
+                flexDirection: "column",
+              }}
             >
-              ‹
+              <Box component="span" sx={{ fontSize: "2rem", lineHeight: 1 }}>
+                ‹
+              </Box>
+              Prev
             </Button>
-            <Box sx={{ flex: 1, textAlign: "center" }}>
-              <Typography variant="h4">HEAT {heat.number}</Typography>
-              <Typography variant="h5" color="text.secondary">
-                {heat.groups[0]?.danceName ?? "—"}
+            <Box sx={{ flex: 1, textAlign: "center", px: 1 }}>
+              <Typography variant="overline" sx={{ fontWeight: 800, letterSpacing: 1 }}>
+                Heat {heatIndex + 1} of {heats.length}
+                {heat.submitted ? " · DONE" : ""}
+              </Typography>
+              <Typography variant="h4" component="h2">
+                {heat.groups[0]?.danceName ?? `Heat ${heat.number}`}
+              </Typography>
+              <Typography variant="h6" color="text.secondary">
+                Heat #{heat.number}
                 {heat.groups.length > 1
                   ? ` · ${[...new Set(heat.groups.map((group) => group.divisionName))].join(" + ")}`
                   : heat.groups[0]
@@ -482,18 +498,35 @@ export function JudgeBoard({
               disabled={!nextHeat}
               onClick={() => nextHeat && requestHeatChange(nextHeat.number)}
               aria-label="Next heat"
-              sx={{ minWidth: 88, minHeight: 88, fontSize: "3rem", lineHeight: 1, px: 2 }}
+              sx={{
+                minWidth: { xs: 72, sm: 120 },
+                minHeight: 88,
+                fontSize: { xs: "1.1rem", sm: "1.25rem" },
+                lineHeight: 1.15,
+                px: 2,
+                flexDirection: "column",
+              }}
             >
-              ›
+              <Box component="span" sx={{ fontSize: "2rem", lineHeight: 1 }}>
+                ›
+              </Box>
+              Next
             </Button>
           </Stack>
+          <Alert severity="info" sx={{ mb: 1 }}>
+            Tap a medal for each couple
+            {heat.groups.some((group) => requiresPlacement(group.scale as Scale))
+              ? ", then pick place if two couples share a medal"
+              : ""}
+            . When finished, press <strong>Submit heat</strong> at the bottom.
+          </Alert>
           {heat.submitted ? (
-            <Alert severity="info">
-              This heat is confirmed and locked. Ask a scrutineer to change marks.
+            <Alert severity="success">
+              This heat is locked. A scrutineer can still fix marks if needed.
             </Alert>
           ) : null}
           {!heat.submitted && dirty ? (
-            <Alert severity="warning">You have unsubmitted changes on this heat.</Alert>
+            <Alert severity="warning">You have changes that are not submitted yet.</Alert>
           ) : null}
 
           <Stack spacing={3} sx={{ mt: 2 }}>
@@ -723,63 +756,79 @@ export function JudgeBoard({
             })}
           </Stack>
 
-          <Button
-            sx={{ mt: 3 }}
-            fullWidth
-            variant="contained"
-            size="large"
-            disabled={heat.submitted || busy}
-            onClick={() => {
-              if (heat.submitted) return;
-              for (const group of heat.groups) {
-                const needsPlace = requiresPlacement(group.scale as Scale);
-                const active = group.entries.filter((entry) => !entry.scratched);
-                const placeMax = active.length;
-                for (const entry of active) {
-                  if (!entry.medal) {
-                    setError(`Pick a medal for bib ${entry.bib}.`);
-                    return;
-                  }
-                  if (needsPlace && placeMax > 1 && !entry.placement) {
-                    setError(
-                      `Same medal as another couple — pick place for bib ${entry.bib} (available slots only).`,
-                    );
-                    return;
-                  }
-                  if (needsPlace && placeMax === 1 && !entry.placement) {
-                    updateEntry(heat.id, entry.heatEntryId, { placement: 1 });
-                  }
-                }
-                if (needsPlace && placeMax > 1) {
-                  const places = active.map((entry) => entry.placement);
-                  if (places.some((place) => !place) || new Set(places).size !== places.length) {
-                    setError(
-                      `Each couple in ${group.divisionName} · ${group.danceName} needs a different place.`,
-                    );
-                    return;
-                  }
-                  const medalPlaceError = medalPlacementConflict(
-                    active.map((entry) => ({
-                      bib: entry.bib,
-                      medal: entry.medal!,
-                      placement: entry.placement!,
-                    })),
-                    group.scale as Scale,
-                  );
-                  if (medalPlaceError) {
-                    setError(medalPlaceError);
-                    return;
-                  }
-                }
-              }
-              setError("");
-              setConfirmOpen(true);
-            }}
-          >
-            {heat.submitted ? "LOCKED" : "SUBMIT"}
-          </Button>
         </CardContent>
       </Card>
+
+      <Box
+        sx={{
+          position: "sticky",
+          bottom: 0,
+          zIndex: 8,
+          mt: 1,
+          py: 1.5,
+          px: { xs: 0, md: 0 },
+          bgcolor: "background.default",
+          borderTop: "2px solid",
+          borderColor: "divider",
+        }}
+      >
+        <Button
+          fullWidth
+          variant="contained"
+          color={heat.submitted ? "inherit" : "success"}
+          size="large"
+          disabled={heat.submitted || busy}
+          sx={{ minHeight: 72, fontSize: "1.4rem" }}
+          onClick={() => {
+            if (heat.submitted) return;
+            for (const group of heat.groups) {
+              const needsPlace = requiresPlacement(group.scale as Scale);
+              const active = group.entries.filter((entry) => !entry.scratched);
+              const placeMax = active.length;
+              for (const entry of active) {
+                if (!entry.medal) {
+                  setError(`Pick a medal for bib ${entry.bib}.`);
+                  return;
+                }
+                if (needsPlace && placeMax > 1 && !entry.placement) {
+                  setError(
+                    `Same medal as another couple — pick place for bib ${entry.bib} (available slots only).`,
+                  );
+                  return;
+                }
+                if (needsPlace && placeMax === 1 && !entry.placement) {
+                  updateEntry(heat.id, entry.heatEntryId, { placement: 1 });
+                }
+              }
+              if (needsPlace && placeMax > 1) {
+                const places = active.map((entry) => entry.placement);
+                if (places.some((place) => !place) || new Set(places).size !== places.length) {
+                  setError(
+                    `Each couple in ${group.divisionName} · ${group.danceName} needs a different place.`,
+                  );
+                  return;
+                }
+                const medalPlaceError = medalPlacementConflict(
+                  active.map((entry) => ({
+                    bib: entry.bib,
+                    medal: entry.medal!,
+                    placement: entry.placement!,
+                  })),
+                  group.scale as Scale,
+                );
+                if (medalPlaceError) {
+                  setError(medalPlaceError);
+                  return;
+                }
+              }
+            }
+            setError("");
+            setConfirmOpen(true);
+          }}
+        >
+          {heat.submitted ? "Heat locked — already submitted" : "Submit heat"}
+        </Button>
+      </Box>
 
       <Dialog
         open={Boolean(error)}
@@ -862,7 +911,9 @@ export function JudgeBoard({
       </Dialog>
 
       <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} fullWidth maxWidth="md">
-        <DialogTitle sx={{ fontSize: "1.75rem" }}>Confirm heat {heat.number}</DialogTitle>
+        <DialogTitle sx={{ fontSize: "1.75rem" }}>
+          Submit heat {heat.number}?
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ mt: 1 }}>
             {heat.groups.map((group) => (
@@ -911,15 +962,16 @@ export function JudgeBoard({
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setConfirmOpen(false)} sx={{ minWidth: 140 }}>
-            Back
+            Go back
           </Button>
           <Button
             variant="contained"
+            color="success"
             disabled={busy}
             onClick={() => save(true)}
-            sx={{ minWidth: 200, minHeight: 64 }}
+            sx={{ minWidth: 220, minHeight: 64, fontSize: "1.2rem" }}
           >
-            Confirm
+            Yes, submit heat
           </Button>
         </DialogActions>
       </Dialog>
