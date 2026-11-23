@@ -188,6 +188,13 @@ export function JudgeBoard({
     entryId: string;
     scratched: boolean;
   } | null>(null);
+  const [notesTarget, setNotesTarget] = useState<{
+    heatId: string;
+    entryId: string;
+    name: string;
+    bib: number;
+    notes: string;
+  } | null>(null);
   const [pendingHeatNumber, setPendingHeatNumber] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -772,166 +779,227 @@ export function JudgeBoard({
                               flex: "1 1 0",
                               minHeight: 0,
                               display: "flex",
-                              alignItems: "center",
-                              gap: 0.75,
-                              px: 0.75,
-                              border: "1.5px solid",
+                              flexDirection: "column",
+                              gap: 0.35,
+                              px: 0.85,
+                              py: 0.4,
+                              border: "2px solid",
                               borderColor: entry.scratched
                                 ? "error.light"
                                 : medalColor?.bg ?? "divider",
-                              borderRadius: 1,
+                              borderRadius: 1.5,
                               bgcolor: entry.scratched
                                 ? "#ffebee"
                                 : medalColor
-                                  ? `${medalColor.bg}12`
+                                  ? `${medalColor.bg}14`
                                   : "background.paper",
+                              boxShadow: medalColor ? `inset 3px 0 0 ${medalColor.bg}` : "none",
                             }}
                           >
                             <Typography
-                              sx={{
-                                width: 44,
-                                flexShrink: 0,
-                                fontWeight: 900,
-                                fontSize: "1.15rem",
-                                textAlign: "center",
-                                bgcolor: "#000",
-                                color: "#fff",
-                                borderRadius: 0.5,
-                                py: 0.25,
-                              }}
-                            >
-                              {entry.bib}
-                            </Typography>
-                            <Typography
                               noWrap
-                              sx={{
-                                flex: "0 1 120px",
-                                minWidth: 72,
-                                fontWeight: 700,
-                                fontSize: "0.8rem",
-                                lineHeight: 1.15,
-                              }}
                               title={entry.name}
+                              sx={{
+                                fontWeight: 800,
+                                fontSize: "0.82rem",
+                                lineHeight: 1.15,
+                                letterSpacing: 0.1,
+                                flexShrink: 0,
+                              }}
                             >
                               {entry.name}
                             </Typography>
-                            <ToggleButtonGroup
-                              exclusive
-                              size="small"
-                              value={entry.scratched ? null : entry.medal}
-                              onChange={(_, value) => {
-                                if (entry.scratched || !value) return;
-                                updateEntry(heat.id, entry.heatEntryId, { medal: value });
-                              }}
-                              disabled={heat.submitted || entry.scratched}
+
+                            <Box
                               sx={{
                                 flex: 1,
-                                minWidth: 0,
+                                minHeight: 0,
                                 display: "flex",
-                                flexWrap: "nowrap",
-                                gap: 0.35,
-                                "& .MuiToggleButtonGroup-grouped": {
-                                  border: "2px solid",
-                                  margin: 0,
-                                  borderRadius: "6px !important",
-                                },
+                                alignItems: "stretch",
+                                gap: 0.75,
                               }}
                             >
-                              {medals.map((medal) => {
-                                const colors = MEDAL_COLORS[medal] ?? { bg: "#212121", fg: "#fff" };
-                                const selected = entry.medal === medal && !entry.scratched;
-                                return (
-                                  <ToggleButton
-                                    key={medal}
-                                    value={medal}
-                                    sx={{
-                                      flex: "1 1 0",
-                                      minWidth: "0 !important",
-                                      width: "auto",
-                                      minHeight: "36px !important",
-                                      height: "36px !important",
-                                      p: "2px !important",
-                                      px: "2px !important",
-                                      fontSize: "0.85rem !important",
-                                      fontWeight: 900,
-                                      lineHeight: 1,
-                                      borderColor: `${colors.bg} !important`,
-                                      color: selected ? colors.fg : colors.bg,
-                                      bgcolor: selected ? colors.bg : "#fff",
-                                      "&.Mui-selected": {
-                                        bgcolor: `${colors.bg} !important`,
-                                        color: `${colors.fg} !important`,
-                                      },
-                                    }}
-                                  >
-                                    {medal}
-                                  </ToggleButton>
-                                );
-                              })}
-                            </ToggleButtonGroup>
-                            {needsPlace ? (
-                              <Select
-                                size="small"
-                                displayEmpty
-                                value={
-                                  entry.scratched
-                                    ? ""
-                                    : entry.placement ?? (placeMax === 1 ? 1 : "")
-                                }
-                                disabled={
-                                  heat.submitted ||
-                                  entry.scratched ||
-                                  placeMax <= 1 ||
-                                  (!placeTied && Boolean(entry.medal))
-                                }
-                                onChange={(event) =>
-                                  updateEntry(
-                                    heat.id,
-                                    entry.heatEntryId,
-                                    { placement: Number(event.target.value) },
-                                    { reband: false },
-                                  )
-                                }
+                              <Box
                                 sx={{
-                                  width: 56,
+                                  width: 72,
                                   flexShrink: 0,
-                                  fontWeight: 800,
-                                  bgcolor: placeTied ? "#fff8e1" : undefined,
-                                  "& .MuiSelect-select": { py: 0.5, px: 0.75 },
+                                  alignSelf: "stretch",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  bgcolor: "#0a0a0a",
+                                  color: "#fff",
+                                  borderRadius: 1.25,
+                                  minHeight: 52,
                                 }}
                               >
-                                <MenuItem value="" disabled>
-                                  #
-                                </MenuItem>
-                                {placeOptions.map((place) => (
-                                  <MenuItem key={place} value={place}>
-                                    {place}
-                                  </MenuItem>
-                                ))}
-                              </Select>
-                            ) : null}
-                            <Button
-                              color={entry.scratched ? "success" : "error"}
-                              variant="outlined"
-                              disabled={heat.submitted}
-                              sx={{
-                                minWidth: 40,
-                                px: 0.5,
-                                minHeight: 36,
-                                flexShrink: 0,
-                                fontSize: "0.7rem",
-                                fontWeight: 800,
-                              }}
-                              onClick={() =>
-                                setScratchTarget({
-                                  heatId: heat.id,
-                                  entryId: entry.heatEntryId,
-                                  scratched: entry.scratched,
-                                })
-                              }
-                            >
-                              {entry.scratched ? "IN" : "OUT"}
-                            </Button>
+                                <Typography
+                                  sx={{
+                                    fontWeight: 900,
+                                    fontSize: "1.85rem",
+                                    lineHeight: 1,
+                                    fontVariantNumeric: "tabular-nums",
+                                  }}
+                                >
+                                  {entry.bib}
+                                </Typography>
+                              </Box>
+
+                              <Box
+                                sx={{
+                                  flex: 1,
+                                  minWidth: 0,
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: 0.35,
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <ToggleButtonGroup
+                                  exclusive
+                                  size="small"
+                                  value={entry.scratched ? null : entry.medal}
+                                  onChange={(_, value) => {
+                                    if (entry.scratched || !value) return;
+                                    updateEntry(heat.id, entry.heatEntryId, { medal: value });
+                                  }}
+                                  disabled={heat.submitted || entry.scratched}
+                                  sx={{
+                                    display: "flex",
+                                    flexWrap: "nowrap",
+                                    gap: 0.3,
+                                    "& .MuiToggleButtonGroup-grouped": {
+                                      border: "2px solid",
+                                      margin: 0,
+                                      borderRadius: "6px !important",
+                                    },
+                                  }}
+                                >
+                                  {medals.map((medal) => {
+                                    const colors = MEDAL_COLORS[medal] ?? {
+                                      bg: "#212121",
+                                      fg: "#fff",
+                                    };
+                                    const selected = entry.medal === medal && !entry.scratched;
+                                    return (
+                                      <ToggleButton
+                                        key={medal}
+                                        value={medal}
+                                        sx={{
+                                          flex: "1 1 0",
+                                          minWidth: "0 !important",
+                                          minHeight: "34px !important",
+                                          height: "34px !important",
+                                          p: "2px !important",
+                                          fontSize: "0.8rem !important",
+                                          fontWeight: 900,
+                                          lineHeight: 1,
+                                          borderColor: `${colors.bg} !important`,
+                                          color: selected ? colors.fg : colors.bg,
+                                          bgcolor: selected ? colors.bg : "#fff",
+                                          "&.Mui-selected": {
+                                            bgcolor: `${colors.bg} !important`,
+                                            color: `${colors.fg} !important`,
+                                          },
+                                        }}
+                                      >
+                                        {medal}
+                                      </ToggleButton>
+                                    );
+                                  })}
+                                </ToggleButtonGroup>
+
+                                <Stack direction="row" spacing={0.5} alignItems="center">
+                                  {needsPlace ? (
+                                    <Select
+                                      size="small"
+                                      displayEmpty
+                                      value={
+                                        entry.scratched
+                                          ? ""
+                                          : entry.placement ?? (placeMax === 1 ? 1 : "")
+                                      }
+                                      disabled={
+                                        heat.submitted ||
+                                        entry.scratched ||
+                                        placeMax <= 1 ||
+                                        (!placeTied && Boolean(entry.medal))
+                                      }
+                                      onChange={(event) =>
+                                        updateEntry(
+                                          heat.id,
+                                          entry.heatEntryId,
+                                          { placement: Number(event.target.value) },
+                                          { reband: false },
+                                        )
+                                      }
+                                      sx={{
+                                        width: 58,
+                                        flexShrink: 0,
+                                        fontWeight: 800,
+                                        bgcolor: placeTied ? "#fff8e1" : "#fff",
+                                        "& .MuiSelect-select": { py: 0.35, px: 0.75 },
+                                      }}
+                                    >
+                                      <MenuItem value="" disabled>
+                                        #
+                                      </MenuItem>
+                                      {placeOptions.map((place) => (
+                                        <MenuItem key={place} value={place}>
+                                          {place}
+                                        </MenuItem>
+                                      ))}
+                                    </Select>
+                                  ) : null}
+                                  <Button
+                                    size="small"
+                                    variant={entry.notes.trim() ? "contained" : "outlined"}
+                                    color={entry.notes.trim() ? "primary" : "inherit"}
+                                    disabled={heat.submitted}
+                                    onClick={() =>
+                                      setNotesTarget({
+                                        heatId: heat.id,
+                                        entryId: entry.heatEntryId,
+                                        name: entry.name,
+                                        bib: entry.bib,
+                                        notes: entry.notes,
+                                      })
+                                    }
+                                    sx={{
+                                      flex: 1,
+                                      minHeight: 32,
+                                      fontWeight: 800,
+                                      fontSize: "0.75rem",
+                                      textTransform: "none",
+                                    }}
+                                  >
+                                    {entry.notes.trim() ? "Notes · edited" : "Notes"}
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    color={entry.scratched ? "success" : "error"}
+                                    variant="outlined"
+                                    disabled={heat.submitted}
+                                    sx={{
+                                      minWidth: 64,
+                                      minHeight: 32,
+                                      px: 0.75,
+                                      fontSize: "0.7rem",
+                                      fontWeight: 800,
+                                    }}
+                                    onClick={() =>
+                                      setScratchTarget({
+                                        heatId: heat.id,
+                                        entryId: entry.heatEntryId,
+                                        scratched: entry.scratched,
+                                      })
+                                    }
+                                  >
+                                    {entry.scratched ? "Unscratch" : "Scratch"}
+                                  </Button>
+                                </Stack>
+                              </Box>
+                            </Box>
                           </Box>
                         );
                       }
@@ -1193,6 +1261,50 @@ export function JudgeBoard({
         <DialogActions>
           <Button variant="contained" color="error" fullWidth onClick={() => setError("")}>
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(notesTarget)}
+        onClose={() => setNotesTarget(null)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>
+          Notes · bib {notesTarget?.bib}
+        </DialogTitle>
+        <DialogContent>
+          {notesTarget ? (
+            <Stack spacing={1.5} sx={{ mt: 1 }}>
+              <Typography color="text.secondary">{notesTarget.name}</Typography>
+              <TextField
+                autoFocus
+                label="Notes"
+                value={notesTarget.notes}
+                multiline
+                minRows={3}
+                fullWidth
+                onChange={(event) =>
+                  setNotesTarget({ ...notesTarget, notes: event.target.value })
+                }
+              />
+            </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNotesTarget(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              if (!notesTarget) return;
+              updateEntry(notesTarget.heatId, notesTarget.entryId, {
+                notes: notesTarget.notes,
+              });
+              setNotesTarget(null);
+            }}
+          >
+            Save notes
           </Button>
         </DialogActions>
       </Dialog>
