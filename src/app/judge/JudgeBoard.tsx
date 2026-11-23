@@ -200,7 +200,7 @@ export function JudgeBoard({
   scopeSlot,
 }: Props) {
   const router = useRouter();
-  const { judgeChromePx, isPhone } = useResponsiveLayout();
+  const { isPhone } = useResponsiveLayout();
   const [heats, setHeats] = useState(initial);
   const [heatNumber, setHeatNumber] = useState(initial[0]?.number ?? 1);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -501,23 +501,29 @@ export function JudgeBoard({
     setConfirmOpen(true);
   }
 
-  const chromePx = judgeChromePx({ compact, settingsOpen });
-
   const settingsControls = (
     <Stack spacing={1.5}>
-      {scopeSlot}
+      {scopeSlot ? <Box key="scope">{scopeSlot}</Box> : null}
       {!compact ? (
-        <Box>
+        <Box key="titles">
           <Typography variant="h5">{competitionName}</Typography>
           <Typography color="text.secondary">{sessionName}</Typography>
         </Box>
       ) : (
-        <Typography variant="body2" color="text.secondary">
+        <Typography key="titles-compact" variant="body2" color="text.secondary">
           {competitionName} · {sessionName}
         </Typography>
       )}
-      <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+      <Stack
+        key="controls"
+        direction="row"
+        spacing={1}
+        alignItems="center"
+        useFlexGap
+        flexWrap="wrap"
+      >
         <FormControlLabel
+          key="density"
           control={
             <Switch
               checked={compact}
@@ -538,6 +544,7 @@ export function JudgeBoard({
           }}
         />
         <Chip
+          key="sync"
           label={syncChip.label}
           color={syncChip.color}
           variant="outlined"
@@ -545,6 +552,7 @@ export function JudgeBoard({
         />
         {queueCount > 0 ? (
           <Button
+            key="retry"
             variant="outlined"
             size={compact || isPhone ? "small" : "medium"}
             onClick={() => void tryFlush()}
@@ -554,6 +562,7 @@ export function JudgeBoard({
         ) : null}
         {panelJudges.length > 0 && asJudgeId ? (
           <FormControl
+            key="as-judge"
             sx={{
               minWidth: { xs: 120, sm: 160 },
               flex: { xs: "1 1 140px", sm: "0 0 auto" },
@@ -580,6 +589,7 @@ export function JudgeBoard({
           </FormControl>
         ) : null}
         <FormControl
+          key="heat-jump"
           sx={{
             minWidth: { xs: 140, sm: 220 },
             flex: { xs: "1 1 160px", sm: "0 0 auto" },
@@ -615,8 +625,8 @@ export function JudgeBoard({
       sx={
         compact
           ? {
-              height: `calc(100dvh - ${chromePx}px)`,
-              maxHeight: `calc(100dvh - ${chromePx}px)`,
+              flex: 1,
+              minHeight: 0,
               overflow: "hidden",
             }
           : undefined
@@ -634,6 +644,15 @@ export function JudgeBoard({
           borderRadius: "10px !important",
           bgcolor: "background.paper",
           "&:before": { display: "none" },
+          ...(compact && settingsOpen
+            ? {
+                "& .MuiCollapse-entered": {
+                  maxHeight: "min(220px, 30vh)",
+                  overflow: "auto",
+                  overscrollBehavior: "contain",
+                },
+              }
+            : null),
         }}
       >
         <AccordionSummary
@@ -645,7 +664,13 @@ export function JudgeBoard({
           sx={{
             minHeight: { xs: 44, sm: 48 },
             px: 1.5,
-            "& .MuiAccordionSummary-content": { my: 0.75, alignItems: "center", gap: 1 },
+            "& .MuiAccordionSummary-content": {
+              my: 0.75,
+              alignItems: "center",
+              gap: 1,
+              overflow: "hidden",
+              minWidth: 0,
+            },
           }}
         >
           <Typography fontWeight={800} sx={{ fontSize: { xs: "0.95rem", sm: "1.05rem" } }}>
@@ -671,7 +696,13 @@ export function JudgeBoard({
               color={syncChip.color}
               size="small"
               variant="outlined"
-              sx={{ ml: "auto" }}
+              sx={{
+                ml: "auto",
+                flexShrink: 1,
+                minWidth: 0,
+                maxWidth: { xs: 132, sm: 240 },
+                "& .MuiChip-label": { overflow: "hidden", textOverflow: "ellipsis" },
+              }}
             />
           ) : null}
         </AccordionSummary>
@@ -813,7 +844,8 @@ export function JudgeBoard({
                     display: "flex",
                     flexDirection: "column",
                     gap: 0.5,
-                    overflow: "hidden",
+                    overflow: "auto",
+                    overscrollBehavior: "contain",
                   }
                 : { mt: 2 }
             }
@@ -838,12 +870,10 @@ export function JudgeBoard({
                   sx={
                     compact
                       ? {
-                          flex: group.entries.length,
-                          minHeight: 0,
+                          flex: `${Math.max(group.entries.length, 1)} 1 auto`,
                           display: "flex",
                           flexDirection: "column",
                           gap: 0.35,
-                          overflow: "hidden",
                         }
                       : undefined
                   }
@@ -863,8 +893,7 @@ export function JudgeBoard({
                     sx={
                       compact
                         ? {
-                            flex: 1,
-                            minHeight: 0,
+                            flex: "1 1 auto",
                             display: "flex",
                             flexDirection: "column",
                             gap: 0.35,
@@ -896,14 +925,13 @@ export function JudgeBoard({
                           <Box
                             key={entry.heatEntryId}
                             sx={{
-                              flex: "1 1 0",
-                              minHeight: 0,
+                              flex: "1 1 auto",
+                              minHeight: 84,
                               display: "flex",
                               alignItems: "stretch",
                               gap: 0.75,
                               px: 0.85,
                               py: 0.55,
-                              overflow: "hidden",
                               border: "2px solid",
                               borderColor: entry.scratched
                                 ? "error.light"
@@ -968,6 +996,8 @@ export function JudgeBoard({
                                     display: "flex",
                                     flexWrap: "nowrap",
                                     gap: 0.3,
+                                    overflowX: "auto",
+                                    overscrollBehavior: "contain",
                                     "& .MuiToggleButtonGroup-grouped": {
                                       border: "2px solid",
                                       margin: 0,
@@ -986,8 +1016,8 @@ export function JudgeBoard({
                                         key={medal}
                                         value={medal}
                                         sx={{
-                                          flex: "1 1 0",
-                                          minWidth: "0 !important",
+                                          flex: "1 0 auto",
+                                          minWidth: "34px !important",
                                           minHeight: {
                                             xs: "30px !important",
                                             sm: "34px !important",
@@ -1358,6 +1388,7 @@ export function JudgeBoard({
 
       <Dialog
         open={Boolean(error)}
+        fullScreen={isPhone}
         disableEscapeKeyDown
         onClose={(_, reason) => {
           if (reason === "backdropClick") return;
@@ -1380,6 +1411,7 @@ export function JudgeBoard({
       <Dialog
         open={Boolean(notesTarget)}
         onClose={() => setNotesTarget(null)}
+        fullScreen={isPhone}
         fullWidth
         maxWidth="sm"
       >
@@ -1480,7 +1512,13 @@ export function JudgeBoard({
         </DialogActions>
       </Dialog>
 
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} fullWidth maxWidth="md">
+      <Dialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        fullScreen={isPhone}
+        fullWidth
+        maxWidth="md"
+      >
         <DialogTitle sx={{ fontSize: "1.75rem" }}>
           Submit heat {heat.number}?
         </DialogTitle>

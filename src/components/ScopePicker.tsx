@@ -46,7 +46,11 @@ export function ScopePicker({
 
   return (
     <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 1.25, md: 2 }} sx={{ mb: 0 }}>
-      <FormControl sx={{ minWidth: { xs: "100%", sm: 200, md: 280 }, flex: 1 }} size={isPhone ? "small" : "medium"}>
+      <FormControl
+        key="competition"
+        sx={{ minWidth: { xs: "100%", sm: 200, md: 280 }, flex: 1 }}
+        size={isPhone ? "small" : "medium"}
+      >
         <InputLabel id="competition-select">Competition</InputLabel>
         <Select
           labelId="competition-select"
@@ -70,7 +74,11 @@ export function ScopePicker({
       </FormControl>
 
       {sessions.length > 0 && sessionId ? (
-        <FormControl sx={{ minWidth: { xs: "100%", sm: 180, md: 220 }, flex: 1 }} size={isPhone ? "small" : "medium"}>
+        <FormControl
+          key="session"
+          sx={{ minWidth: { xs: "100%", sm: 180, md: 220 }, flex: 1 }}
+          size={isPhone ? "small" : "medium"}
+        >
           <InputLabel id="session-select">Session</InputLabel>
           <Select
             labelId="session-select"
@@ -89,7 +97,11 @@ export function ScopePicker({
       ) : null}
 
       {divisions.length > 0 && divisionId ? (
-        <FormControl sx={{ minWidth: { xs: "100%", sm: 180, md: 220 }, flex: 1 }} size={isPhone ? "small" : "medium"}>
+        <FormControl
+          key="division"
+          sx={{ minWidth: { xs: "100%", sm: 180, md: 220 }, flex: 1 }}
+          size={isPhone ? "small" : "medium"}
+        >
           <InputLabel id="division-select">Division</InputLabel>
           <Select
             labelId="division-select"

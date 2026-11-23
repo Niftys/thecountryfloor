@@ -150,7 +150,7 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
               borderColor: "divider",
             }}
           >
-            <Table size="small" stickyHeader>
+            <Table size="small" stickyHeader sx={{ minWidth: 480 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Bib</TableCell>
@@ -223,7 +223,7 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
               borderColor: "divider",
             }}
           >
-            <Table size="small" stickyHeader>
+            <Table size="small" stickyHeader sx={{ minWidth: 520 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Heat</TableCell>

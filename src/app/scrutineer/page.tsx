@@ -1,4 +1,5 @@
 import Alert from "@mui/material/Alert";
+import Stack from "@mui/material/Stack";
 import { Suspense } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ScopePicker } from "@/components/ScopePicker";
@@ -68,40 +69,44 @@ export default async function ScrutineerPage({ searchParams }: Props) {
           : []
       }
     >
-      {competition && activeCompetitions.length > 0 ? (
-        <Suspense fallback={null}>
-          <ScopePicker
-            competitions={activeCompetitions.map((item) => ({
-              id: item.id,
-              label: item.name,
-            }))}
-            sessions={sessions.map((item) => ({ id: item.id, label: item.name }))}
-            divisions={divisions.map((item) => ({
-              id: item.id,
-              label: `${item.name} (${item.scale})`,
-            }))}
-            competitionId={competition.id}
-            sessionId={session?.id}
-            divisionId={division?.id}
-          />
-        </Suspense>
-      ) : null}
+      <Stack spacing={2.5}>
+        {competition && activeCompetitions.length > 0 ? (
+          <Suspense fallback={null}>
+            <ScopePicker
+              competitions={activeCompetitions.map((item) => ({
+                id: item.id,
+                label: item.name,
+              }))}
+              sessions={sessions.map((item) => ({ id: item.id, label: item.name }))}
+              divisions={divisions.map((item) => ({
+                id: item.id,
+                label: `${item.name} (${item.scale})`,
+              }))}
+              competitionId={competition.id}
+              sessionId={session?.id}
+              divisionId={division?.id}
+            />
+          </Suspense>
+        ) : null}
 
-      {inactiveRequested ? (
-        <Alert severity="warning">
-          {requested?.name ?? "This competition"} is inactive. Ask an admin to mark it active, or choose
-          an active competition.
-        </Alert>
-      ) : activeCompetitions.length === 0 ? (
-        <Alert severity="warning">No active competitions. An admin must mark a competition active.</Alert>
-      ) : !view ? (
-        <Alert severity="warning">No competition is loaded. Run the Firestore seed.</Alert>
-      ) : (
-        <ScrutineerBoard
-          key={`${view.competitionId}-${view.sessionId}-${view.divisionId}`}
-          initial={view}
-        />
-      )}
+        {inactiveRequested ? (
+          <Alert severity="warning">
+            {requested?.name ?? "This competition"} is inactive. Ask an admin to mark it active, or
+            choose an active competition.
+          </Alert>
+        ) : activeCompetitions.length === 0 ? (
+          <Alert severity="warning">
+            No active competitions. An admin must mark a competition active.
+          </Alert>
+        ) : !view ? (
+          <Alert severity="warning">No competition is loaded. Run the Firestore seed.</Alert>
+        ) : (
+          <ScrutineerBoard
+            key={`${view.competitionId}-${view.sessionId}-${view.divisionId}`}
+            initial={view}
+          />
+        )}
+      </Stack>
     </AppShell>
   );
 }
