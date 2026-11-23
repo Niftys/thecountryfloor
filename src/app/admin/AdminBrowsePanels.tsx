@@ -14,15 +14,17 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useMemo, useState } from "react";
+import { danceName, danceOrder } from "@/lib/dances";
 
 type Competitor = { id: string; bib: number; name: string };
 type Division = { id: string; name: string; competitors: Competitor[] };
+type HeatEntry = { bib: number; name: string; divisionName: string };
 type Heat = {
   id: string;
   number: number;
   styleName: string;
   styleAbbrev: string;
-  entries: Array<{ bib: number; divisionName: string }>;
+  entries: HeatEntry[];
 };
 
 type Props = {
@@ -37,12 +39,12 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
   const [competitorQuery, setCompetitorQuery] = useState("");
   const [heatStyle, setHeatStyle] = useState("all");
   const [heatQuery, setHeatQuery] = useState("");
+  const [breakdownHeatId, setBreakdownHeatId] = useState("");
 
-  const styles = useMemo(
-    () =>
-      [...new Set(heats.map((h) => h.styleAbbrev))].sort((a, b) => a.localeCompare(b)),
-    [heats],
-  );
+  const styles = useMemo(() => {
+    const abbrevs = [...new Set(heats.map((h) => h.styleAbbrev))];
+    return abbrevs.sort((a, b) => danceOrder(a) - danceOrder(b) || a.localeCompare(b));
+  }, [heats]);
 
   const competitorRows = useMemo(() => {
     const q = competitorQuery.trim().toLowerCase();
@@ -75,16 +77,34 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
       if (heatStyle !== "all" && heat.styleAbbrev !== heatStyle) return false;
       if (!q) return true;
       const divisionsLabel = [...new Set(heat.entries.map((e) => e.divisionName))].join(" ");
-      const couples = [...new Set(heat.entries.map((e) => String(e.bib)))].join(" ");
+      const couples = heat.entries
+        .map((e) => `${e.bib} ${e.name}`)
+        .join(" ");
       return (
         String(heat.number).includes(q) ||
         heat.styleName.toLowerCase().includes(q) ||
         heat.styleAbbrev.toLowerCase().includes(q) ||
         divisionsLabel.toLowerCase().includes(q) ||
-        couples.includes(q)
+        couples.toLowerCase().includes(q)
       );
     });
   }, [heatQuery, heatStyle, heats]);
+
+  const breakdownHeat = heats.find((h) => h.id === breakdownHeatId) ?? null;
+
+  const breakdownGroups = useMemo(() => {
+    if (!breakdownHeat) return [];
+    const map = new Map<string, HeatEntry[]>();
+    for (const entry of breakdownHeat.entries) {
+      const list = map.get(entry.divisionName) ?? [];
+      list.push(entry);
+      map.set(entry.divisionName, list);
+    }
+    return [...map.entries()].map(([divisionName, entries]) => ({
+      divisionName,
+      entries: [...entries].sort((a, b) => a.bib - b.bib),
+    }));
+  }, [breakdownHeat]);
 
   return (
     <Stack spacing={3}>
@@ -101,6 +121,7 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
               value={divisionFilter}
               onChange={(e) => setDivisionFilter(e.target.value)}
               sx={{ minWidth: 220 }}
+              SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 360 } } } }}
             >
               <MenuItem value="all">All divisions ({divisions.length})</MenuItem>
               {divisions.map((d) => (
@@ -166,12 +187,13 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
               label="Dance"
               value={heatStyle}
               onChange={(e) => setHeatStyle(e.target.value)}
-              sx={{ minWidth: 160 }}
+              sx={{ minWidth: 200 }}
+              SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 360 } } } }}
             >
-              <MenuItem value="all">All dances</MenuItem>
+              <MenuItem value="all">All dances (floor order)</MenuItem>
               {styles.map((abbrev) => (
                 <MenuItem key={abbrev} value={abbrev}>
-                  {abbrev}
+                  {danceOrder(abbrev)}. {danceName(abbrev)} ({abbrev})
                 </MenuItem>
               ))}
             </TextField>
@@ -184,7 +206,8 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
             />
           </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Showing {heatRows.length} of {heats.length} heats
+            Showing {heatRows.length} of {heats.length} heats · dances listed in competition floor
+            order
           </Typography>
           <Box sx={{ maxHeight: 360, overflow: "auto", border: "1px solid", borderColor: "divider" }}>
             <Table size="small" stickyHeader>
@@ -207,7 +230,9 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
                   return (
                     <TableRow key={heat.id}>
                       <TableCell>{heat.number}</TableCell>
-                      <TableCell>{heat.styleName}</TableCell>
+                      <TableCell>
+                        {heat.styleName} ({heat.styleAbbrev})
+                      </TableCell>
                       <TableCell>{divisionsLabel || "—"}</TableCell>
                       <TableCell>{couples}</TableCell>
                     </TableRow>
@@ -220,6 +245,78 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
                 ) : null}
               </TableBody>
             </Table>
+          </Box>
+
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Heat breakdown
+            </Typography>
+            <TextField
+              select
+              size="small"
+              label="Select heat"
+              value={breakdownHeatId}
+              onChange={(e) => setBreakdownHeatId(e.target.value)}
+              fullWidth
+              sx={{ mb: 1.5, maxWidth: 480 }}
+              SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 360 } } } }}
+            >
+              <MenuItem value="">
+                <em>Choose a heat…</em>
+              </MenuItem>
+              {heats.map((heat) => (
+                <MenuItem key={heat.id} value={heat.id}>
+                  Heat {heat.number} · {heat.styleName} ({heat.styleAbbrev}) ·{" "}
+                  {heat.entries.length} couples
+                </MenuItem>
+              ))}
+            </TextField>
+            {breakdownHeat ? (
+              <Box
+                sx={{
+                  maxHeight: 360,
+                  overflow: "auto",
+                  border: "1px solid",
+                  borderColor: "divider",
+                  p: 1.5,
+                }}
+              >
+                <Typography sx={{ mb: 1.5 }} color="text.secondary">
+                  Heat {breakdownHeat.number} · {breakdownHeat.styleName} ·{" "}
+                  {breakdownHeat.entries.length} couples · {breakdownGroups.length} division
+                  {breakdownGroups.length === 1 ? "" : "s"}
+                </Typography>
+                <Stack spacing={2}>
+                  {breakdownGroups.map((group) => (
+                    <Box key={group.divisionName}>
+                      <Typography fontWeight={700} sx={{ mb: 0.5 }}>
+                        {group.divisionName} ({group.entries.length})
+                      </Typography>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell width={80}>Bib</TableCell>
+                            <TableCell>Competitor</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {group.entries.map((entry) => (
+                            <TableRow key={`${group.divisionName}-${entry.bib}-${entry.name}`}>
+                              <TableCell>{entry.bib}</TableCell>
+                              <TableCell>{entry.name}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+            ) : (
+              <Typography color="text.secondary">
+                Pick a heat to see each division’s competitors and bibs.
+              </Typography>
+            )}
           </Box>
         </CardContent>
       </Card>

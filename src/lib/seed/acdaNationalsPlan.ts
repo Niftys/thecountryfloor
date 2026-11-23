@@ -194,6 +194,7 @@ function packDanceHeats(
     }
 
     // Co-mingle small divisions (prefer same scale) until heat is full.
+    // Never fragment a small division across heats — take all of it or skip.
     const slots: PlannedHeatSlot[] = [];
     let filled = 0;
     const preferredScale = head.plan.scale;
@@ -205,24 +206,28 @@ function packDanceHeats(
       if (queue.remaining.length >= SOLO_MIN) break;
       if (slots.length > 0 && queue.plan.scale !== preferredScale) continue;
 
-      const take = Math.min(queue.remaining.length, MAX_HEAT_SIZE - filled);
-      const coupleIndexes = queue.remaining.splice(0, take);
+      const space = MAX_HEAT_SIZE - filled;
+      // Keep each small division whole on one heat when possible.
+      if (queue.remaining.length > space) continue;
+
+      const coupleIndexes = queue.remaining.splice(0, queue.remaining.length);
       slots.push({
         divisionName: queue.plan.name,
         scale: queue.plan.scale,
         ageRank: queue.plan.ageRank,
         coupleIndexes,
       });
-      filled += take;
+      filled += coupleIndexes.length;
     }
 
-    // If scale preference left the heat tiny, fill from any remaining small queues.
+    // If scale preference left the heat tiny, fill from any remaining small queues (still whole).
     if (filled < 3) {
       for (const queue of queues) {
         if (filled >= MAX_HEAT_SIZE) break;
         if (queue.remaining.length === 0 || queue.remaining.length >= SOLO_MIN) continue;
-        const take = Math.min(queue.remaining.length, MAX_HEAT_SIZE - filled);
-        const coupleIndexes = queue.remaining.splice(0, take);
+        const space = MAX_HEAT_SIZE - filled;
+        if (queue.remaining.length > space) continue;
+        const coupleIndexes = queue.remaining.splice(0, queue.remaining.length);
         const existing = slots.find((s) => s.divisionName === queue.plan.name);
         if (existing) existing.coupleIndexes.push(...coupleIndexes);
         else {
@@ -233,8 +238,19 @@ function packDanceHeats(
             coupleIndexes,
           });
         }
-        filled += take;
+        filled += coupleIndexes.length;
       }
+    }
+
+    // Safety: if nothing fit whole (oversized leftover vs empty heat), take head alone.
+    if (slots.length === 0 && head.remaining.length > 0 && head.remaining.length < SOLO_MIN) {
+      const coupleIndexes = head.remaining.splice(0, Math.min(head.remaining.length, MAX_HEAT_SIZE));
+      slots.push({
+        divisionName: head.plan.name,
+        scale: head.plan.scale,
+        ageRank: head.plan.ageRank,
+        coupleIndexes,
+      });
     }
 
     if (slots.length === 0) break;

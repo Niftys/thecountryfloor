@@ -33,6 +33,7 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),
+        credentials: "same-origin",
       });
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok) {
@@ -40,6 +41,8 @@ export default function LoginPage() {
         setBusy(false);
         return;
       }
+      // Pull freshly written custom claims into the client ID token for live listeners.
+      await credential.user.getIdToken(true);
       router.push("/");
       router.refresh();
     } catch (err) {

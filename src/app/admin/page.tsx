@@ -193,7 +193,11 @@ export default async function AdminPage({ searchParams }: Props) {
             number: h.number,
             styleName: h.styleName,
             styleAbbrev: h.styleAbbrev,
-            entries: h.entries.map((e) => ({ bib: e.bib, divisionName: e.divisionName })),
+            entries: h.entries.map((e) => ({
+              bib: e.bib,
+              name: e.name,
+              divisionName: e.divisionName,
+            })),
           }))}
           sessionName={session?.name ?? null}
           heatNotes={heatNotes}

@@ -53,21 +53,28 @@ function divisionCountOnHeat(heat: HeatComposition, divisionId: string): number 
   return heat.size;
 }
 
+/** True when this heat is a solo heat for the division (not a co-mingled fill). */
+function isSoloDivisionHeat(heat: HeatComposition, divisionId: string): boolean {
+  const ids = [...new Set(heat.divisionIds.filter(Boolean))];
+  return ids.length === 1 && ids[0] === divisionId;
+}
+
 /**
  * ACDA heating guidance (warnings, not hard blocks).
  * Co-mingling small divisions to fill a heat is normal — not warned.
- * When a division needs multiple heats for the *same dance*: contiguous,
- * sizes differ by ≤1, smaller heat first.
+ * Multi-heat contiguous / size-balance rules apply only when a division is
+ * split across *solo* heats for the same dance (too many couples for one heat).
  */
 export function heatingWarnings(heats: HeatComposition[]): string[] {
   const warnings: string[] = [];
   const sorted = [...heats].sort((a, b) => a.number - b.number);
 
-  // Multi-heat rules only within the same division + same dance style.
+  // Solo multi-heat rounds only: same division + same dance, alone on each heat.
   const byDivisionStyle = new Map<string, HeatComposition[]>();
   for (const heat of sorted) {
     const style = heat.styleAbbrev?.trim() || "_";
     for (const divisionId of new Set(heat.divisionIds.filter(Boolean))) {
+      if (!isSoloDivisionHeat(heat, divisionId)) continue;
       const key = `${divisionId}::${style}`;
       const list = byDivisionStyle.get(key) ?? [];
       list.push(heat);

@@ -34,6 +34,23 @@ test("Saturday Main Floor ~150 heats; co-mingled fills; age order within a dance
   );
   assert.ok(soloSized.length > 0, "expected some solo division heats");
 
+  // Small divisions should appear in at most one heat per dance (not fragmented).
+  const waltzSlots = saturday
+    .filter((h) => h.styleAbbrev === "WLZ")
+    .flatMap((h) => h.slots.map((s) => s.divisionName));
+  const waltzCounts = new Map<string, number>();
+  for (const name of waltzSlots) waltzCounts.set(name, (waltzCounts.get(name) ?? 0) + 1);
+  for (const [name, count] of waltzCounts) {
+    const soloHeats = saturday.filter(
+      (h) =>
+        h.styleAbbrev === "WLZ" &&
+        h.slots.length === 1 &&
+        h.slots[0]!.divisionName === name,
+    );
+    if (soloHeats.length >= 2) continue; // large division legitimately split
+    assert.equal(count, 1, `${name} should not be fragmented across Waltz heats`);
+  }
+
   const waltz = saturday.filter((h) => h.styleAbbrev === "WLZ");
   for (let i = 1; i < waltz.length; i++) {
     const prev = Math.max(...waltz[i - 1]!.slots.map((s) => s.ageRank));

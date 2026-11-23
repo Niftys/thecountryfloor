@@ -204,7 +204,7 @@ test("Rule 6 breaks Rules 1–5 ties by loss%; identical loss% shares average pl
   assert.equal(rule9Total([2.5, 1], 2), 3.5);
 });
 
-test("heatingWarnings flags non-contiguous multi-heats only within the same dance", () => {
+test("heatingWarnings flags non-contiguous solo multi-heats only within the same dance", () => {
   const notes = heatingWarnings([
     { number: 1, divisionIds: ["Open"], size: 4, styleAbbrev: "WLZ" },
     { number: 3, divisionIds: ["Open"], size: 2, styleAbbrev: "WLZ" },
@@ -219,6 +219,25 @@ test("heatingWarnings flags non-contiguous multi-heats only within the same danc
     { number: 103, divisionIds: ["Open"], size: 4, styleAbbrev: "2ST" },
   ]);
   assert.equal(acrossDances.length, 0);
+
+  // Couples of one division spread across co-mingled fills are not a multi-heat split.
+  const comingled = heatingWarnings([
+    {
+      number: 1,
+      divisionIds: ["A", "B"],
+      size: 8,
+      styleAbbrev: "WLZ",
+      divisionSizes: { A: 1, B: 7 },
+    },
+    {
+      number: 2,
+      divisionIds: ["A", "C"],
+      size: 8,
+      styleAbbrev: "WLZ",
+      divisionSizes: { A: 4, C: 4 },
+    },
+  ]);
+  assert.equal(comingled.length, 0);
 });
 
 test("medalBandPlacements auto-fills uniques and clears ties with skipped places", () => {

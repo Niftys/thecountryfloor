@@ -1,6 +1,6 @@
 "use client";
 
-import { signInWithCustomToken, signOut } from "firebase/auth";
+import { onAuthStateChanged, signInWithCustomToken, signOut } from "firebase/auth";
 import { useEffect, useState } from "react";
 import { getClientAuth } from "@/lib/firebase/client";
 
@@ -15,10 +15,38 @@ export function ClientAuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
+    async function waitForAuthUser() {
+      const auth = getClientAuth();
+      if (auth.currentUser) return auth.currentUser;
+      await auth.authStateReady();
+      if (auth.currentUser) return auth.currentUser;
+      return new Promise<typeof auth.currentUser>((resolve) => {
+        const unsub = onAuthStateChanged(auth, (user) => {
+          unsub();
+          resolve(user);
+        });
+      });
+    }
+
+    async function ensureRoleClaim(force = true) {
+      const auth = getClientAuth();
+      const user = auth.currentUser;
+      if (!user) return false;
+      await user.getIdToken(force);
+      const token = await user.getIdTokenResult(force);
+      return Boolean(token.claims.role);
+    }
+
     async function syncFromServerSession() {
       const auth = getClientAuth();
       try {
-        const response = await fetch("/api/auth/session-token", { method: "POST" });
+        await waitForAuthUser();
+
+        const response = await fetch("/api/auth/session-token", {
+          method: "POST",
+          credentials: "same-origin",
+        });
+
         if (response.status === 401) {
           if (auth.currentUser) await signOut(auth);
           if (!cancelled) {
@@ -27,22 +55,54 @@ export function ClientAuthGate({ children }: { children: React.ReactNode }) {
           }
           return;
         }
+
+        const body = (await response.json().catch(() => null)) as {
+          error?: string;
+          uid?: string;
+          customToken?: string | null;
+          tokenError?: string | null;
+        } | null;
+
         if (!response.ok) {
-          const body = (await response.json().catch(() => null)) as { error?: string } | null;
           throw new Error(body?.error ?? "Could not restore Firebase session.");
         }
-        const body = (await response.json()) as { customToken: string };
-        const credential = await signInWithCustomToken(auth, body.customToken);
-        // Force a fresh ID token so Firestore rules see role claims immediately.
-        await credential.user.getIdToken(true);
-        const token = await credential.user.getIdTokenResult(true);
-        if (!token.claims.role) {
-          throw new Error("Signed in, but role claim is missing for Firestore rules.");
+        if (!body?.uid) {
+          throw new Error("Session token response was incomplete.");
         }
-        if (!cancelled) {
-          setReady(true);
-          setError(null);
+
+        if (auth.currentUser?.uid === body.uid) {
+          if (await ensureRoleClaim(true)) {
+            if (!cancelled) {
+              setReady(true);
+              setError(null);
+            }
+            return;
+          }
         }
+
+        if (body.customToken) {
+          const credential = await signInWithCustomToken(auth, body.customToken);
+          await credential.user.getIdToken(true);
+          if (!(await ensureRoleClaim(true))) {
+            await new Promise((r) => setTimeout(r, 400));
+            if (!(await ensureRoleClaim(true))) {
+              throw new Error("Signed in, but role claim is missing for Firestore rules.");
+            }
+          }
+          if (!cancelled) {
+            setReady(true);
+            setError(null);
+          }
+          return;
+        }
+
+        // Claims were updated but we could not mint a custom token, and the
+        // browser is not signed in as this user (or claims still missing).
+        throw new Error(
+          body.tokenError
+            ? `Live Auth sync needs a fresh sign-in (${body.tokenError}).`
+            : "Live Auth sync needs a fresh sign-in. Sign out and sign back in.",
+        );
       } catch (err) {
         if (!cancelled) {
           setReady(true);
