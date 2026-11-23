@@ -43,6 +43,8 @@ Password: `demo12`
 
 Live project seed (destructive) requires `ALLOW_LIVE_SEED=true` plus a service account. Deploy rules after rule changes: `firebase deploy --only firestore:rules`.
 
+Seed includes **ACDA National Championships 2026** (profiled from [Country Scores](https://countrydancescores.com/competitions/E4IPWuo9G8JDP5kwmiOk)): Saturday Main Floor 100+ heats (max 8 couples, oldest age division first within each dance), plus smaller Sunday Morning / Afternoon sessions, all with confirmed judge marks.
+
 - `admin`
 - `scrutineer`
 - Judges: `d.appel`, `k.linkous`, `s.hansen`, `c.graber`, `r.champion`

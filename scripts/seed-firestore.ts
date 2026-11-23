@@ -35,6 +35,8 @@ import type {
 } from "../src/lib/store/types";
 import type { Scale } from "../src/lib/scoring";
 import { createUser } from "../src/lib/store/users";
+import { seedAcdaNationalsCompetition } from "./seedNationalsCompetition";
+import { planSessionHeats } from "../src/lib/seed/acdaNationalsPlan";
 
 async function ensureUser(input: {
   username: string;
@@ -94,7 +96,16 @@ async function main() {
     judgeIds.push(id);
   }
 
-  // —— LoneStar ——
+  // —— ACDA Nationals mega (Country Scores profile) ——
+  console.log("Seeding ACDA National Championships 2026 (large multi-session)…");
+  for (const key of ["saturday", "sundayAm", "sundayPm"] as const) {
+    console.log(`  plan ${key}: ${planSessionHeats(key).length} heats`);
+  }
+  const nationals = await seedAcdaNationalsCompetition(judgeIds);
+  console.log("  Nationals competitionId:", nationals.competitionId);
+  console.log("  Heats by session:", nationals.sessionHeatCounts);
+
+  // —— LoneStar (small Division III sample with known marks) ——
   const lonestarId = adminDb.collection("competitions").doc().id;
   const lonestar: CompetitionDoc = {
     name: COMPETITION.name,
@@ -334,6 +345,9 @@ async function main() {
 
   console.log("Seed complete.");
   console.log("Logins (password demo12): admin, scrutineer, d.appel, …");
+  console.log(
+    "Primary event: ACDA National Championships 2026 — Saturday Main Floor has 100+ heats (max 8/heat, oldest age first within each dance).",
+  );
 }
 
 main().catch((error) => {
