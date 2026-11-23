@@ -1444,8 +1444,8 @@ export function JudgeBoard({
                         bgcolor: entry.scratched ? "#ffebee" : "background.paper",
                       }}
                     >
-                      <BibBox bib={entry.bib} large />
-                      {entry.medal && !entry.scratched ? <MedalBadge medal={entry.medal} large /> : null}
+                      <BibBox bib={entry.bib} />
+                      {entry.medal && !entry.scratched ? <MedalBadge medal={entry.medal} /> : null}
                       <Box sx={{ flex: 1 }}>
                         <Typography variant="h6">{entry.name}</Typography>
                         <Typography sx={{ fontSize: "1.5rem", fontWeight: 800 }}>
