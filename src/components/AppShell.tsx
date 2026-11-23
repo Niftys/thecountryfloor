@@ -19,6 +19,8 @@ type Props = {
   role: string;
   displayName: string;
   links?: { href: string; label: string }[];
+  /** Slimmer header for scoring tablets — less chrome above the heat. */
+  scoringFocus?: boolean;
   children: React.ReactNode;
 };
 
@@ -28,7 +30,14 @@ const ROLE_LABEL: Record<string, string> = {
   SCRUTINEER: "Scrutineer",
 };
 
-export function AppShell({ title, role, displayName, links = [], children }: Props) {
+export function AppShell({
+  title,
+  role,
+  displayName,
+  links = [],
+  scoringFocus = false,
+  children,
+}: Props) {
   const router = useRouter();
   const { denseChrome, isPhone } = useResponsiveLayout();
 
@@ -48,37 +57,45 @@ export function AppShell({ title, role, displayName, links = [], children }: Pro
       <AppBar position="sticky" elevation={2} color="primary">
         <Toolbar
           sx={{
-            gap: { xs: 1, md: 2 },
-            minHeight: { xs: 56, sm: 64, md: 72 },
+            gap: { xs: 0.75, md: scoringFocus ? 1 : 2 },
+            minHeight: scoringFocus
+              ? { xs: 48, sm: 52 }
+              : { xs: 56, sm: 64, md: 72 },
             flexWrap: "wrap",
-            py: { xs: 0.75, md: 1.25 },
+            py: scoringFocus ? 0.5 : { xs: 0.75, md: 1.25 },
             px: { xs: 1.25, sm: 2 },
           }}
         >
-          <Box sx={{ flex: 1, minWidth: { xs: 100, sm: 160 } }}>
+          <Box sx={{ flex: 1, minWidth: { xs: 80, sm: 140 } }}>
             <Typography
               variant="h5"
               component="h1"
-              sx={{ fontSize: { xs: "1.15rem", sm: "1.35rem", md: "1.55rem" } }}
+              sx={{
+                fontSize: scoringFocus
+                  ? { xs: "1.05rem", sm: "1.2rem" }
+                  : { xs: "1.15rem", sm: "1.35rem", md: "1.55rem" },
+              }}
             >
               {title}
             </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                opacity: 0.95,
-                fontSize: { xs: "0.8rem", md: "1rem" },
-                display: { xs: denseChrome ? "none" : "block", sm: "block" },
-              }}
-            >
-              {displayName}
-              {ROLE_LABEL[role] && title !== ROLE_LABEL[role]
-                ? ` · ${ROLE_LABEL[role]}`
-                : ""}
-            </Typography>
+            {!scoringFocus ? (
+              <Typography
+                variant="body2"
+                sx={{
+                  opacity: 0.95,
+                  fontSize: { xs: "0.8rem", md: "1rem" },
+                  display: { xs: denseChrome ? "none" : "block", sm: "block" },
+                }}
+              >
+                {displayName}
+                {ROLE_LABEL[role] && title !== ROLE_LABEL[role]
+                  ? ` · ${ROLE_LABEL[role]}`
+                  : ""}
+              </Typography>
+            ) : null}
           </Box>
           <Stack direction="row" spacing={{ xs: 0.5, sm: 1 }} alignItems="center" useFlexGap flexWrap="wrap">
-            <ThemePrefsToggles />
+            {!scoringFocus || !isPhone ? <ThemePrefsToggles /> : null}
             {links.map((link) => (
               <Button
                 key={link.href}
@@ -86,12 +103,12 @@ export function AppShell({ title, role, displayName, links = [], children }: Pro
                 variant="outlined"
                 component={Link}
                 href={link.href}
-                size={isPhone ? "small" : "medium"}
+                size="small"
                 sx={{
                   borderColor: "rgba(255,255,255,0.55)",
-                  minHeight: { xs: 40, md: 48 },
-                  px: { xs: 1, md: 2 },
-                  fontSize: { xs: "0.85rem", md: "1rem" },
+                  minHeight: scoringFocus ? 36 : { xs: 40, md: 48 },
+                  px: { xs: 1, md: scoringFocus ? 1.25 : 2 },
+                  fontSize: { xs: "0.8rem", md: "0.95rem" },
                 }}
               >
                 {link.label}
@@ -100,27 +117,27 @@ export function AppShell({ title, role, displayName, links = [], children }: Pro
             <Button
               color="inherit"
               variant="contained"
-              size={isPhone ? "small" : "medium"}
+              size="small"
               onClick={logout}
               sx={{
                 bgcolor: "rgba(0,0,0,0.28)",
-                minHeight: { xs: 40, md: 48 },
+                minHeight: scoringFocus ? 36 : { xs: 40, md: 48 },
                 px: { xs: 1.25, md: 2 },
-                fontSize: { xs: "0.85rem", md: "1rem" },
+                fontSize: { xs: "0.8rem", md: "0.95rem" },
                 "&:hover": { bgcolor: "rgba(0,0,0,0.4)" },
               }}
             >
-              {isPhone ? "Out" : "Sign out"}
+              {isPhone || scoringFocus ? "Out" : "Sign out"}
             </Button>
           </Stack>
         </Toolbar>
       </AppBar>
       <Box
         sx={{
-          p: { xs: 1.25, sm: 2, md: 3 },
+          p: scoringFocus ? { xs: 1, sm: 1.25, md: 1.5 } : { xs: 1.25, sm: 2, md: 3 },
           maxWidth: 1400,
           mx: "auto",
-          pb: { xs: 8, md: 4 },
+          pb: scoringFocus ? { xs: 1, md: 2 } : { xs: 8, md: 4 },
           width: "100%",
         }}
       >

@@ -505,9 +505,11 @@ export function ScrutineerBoard({ initial }: Props) {
                             }}
                             sx={{
                               cursor: cell ? "pointer" : "default",
-                              minWidth: { xs: 64, md: 88 },
-                              minHeight: { xs: 52, md: 64 },
-                              py: { xs: 1, md: 1.25 },
+                              minWidth: { xs: 72, md: 96 },
+                              width: { xs: 72, md: 96 },
+                              verticalAlign: "middle",
+                              py: { xs: 0.75, md: 1 },
+                              px: 0.75,
                               ...(cell?.overridden
                                 ? { color: "error.main", fontWeight: 800, bgcolor: "#ffebee" }
                                 : cell
@@ -523,19 +525,45 @@ export function ScrutineerBoard({ initial }: Props) {
                             }}
                           >
                             {cell ? (
-                              <Box>
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  gap: 0.15,
+                                  lineHeight: 1.15,
+                                  minHeight: { xs: 44, md: 52 },
+                                }}
+                              >
                                 <Typography
                                   fontWeight={800}
-                                  fontSize="1.15rem"
+                                  fontSize={{ xs: "1.05rem", md: "1.2rem" }}
                                   color="inherit"
                                   component="span"
+                                  sx={{ whiteSpace: "nowrap", display: "inline-flex", alignItems: "center" }}
                                 >
-                                  {cell.scratched ? "SCRATCH" : cell.medal || "—"}
-                                  <PenIcon />
+                                  {cell.scratched ? "SCR" : cell.medal || "—"}
+                                  {!cell.scratched ? <PenIcon /> : null}
                                 </Typography>
                                 {!cell.scratched && cell.placement != null ? (
-                                  <Typography fontWeight={700} color="inherit">
-                                    Place {cell.placement}
+                                  <Typography
+                                    fontWeight={700}
+                                    color="inherit"
+                                    sx={{
+                                      fontSize: { xs: "0.8rem", md: "0.9rem" },
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    #{cell.placement}
+                                  </Typography>
+                                ) : cell?.scratched ? (
+                                  <Typography
+                                    fontWeight={700}
+                                    color="inherit"
+                                    sx={{ fontSize: "0.75rem", whiteSpace: "nowrap" }}
+                                  >
+                                    scratched
                                   </Typography>
                                 ) : null}
                               </Box>

@@ -18,14 +18,19 @@ export function useResponsiveLayout() {
   const isLandscape = useMediaQuery("(orientation: landscape)");
   const isNarrow = useMediaQuery("(max-width: 900px)");
 
-  /** Extra chrome under the sticky app bar (scope picker, padding). */
-  const judgeChromePx = isPhone
-    ? isLandscape
-      ? 150
-      : 230
-    : isPortrait
-      ? 210
-      : 170;
+  /**
+   * Vertical space taken by app bar + page padding (not including JudgeBoard internals).
+   * Compact mode collapses session controls into an accordion, so reserve less.
+   */
+  function judgeChromePx(options?: { compact?: boolean; settingsOpen?: boolean }) {
+    const compact = Boolean(options?.compact);
+    const settingsOpen = Boolean(options?.settingsOpen);
+    if (compact) {
+      if (settingsOpen) return isPhone ? (isLandscape ? 260 : 340) : isPortrait ? 300 : 260;
+      return isPhone ? (isLandscape ? 96 : 108) : 100;
+    }
+    return isPhone ? (isLandscape ? 150 : 230) : isPortrait ? 210 : 170;
+  }
 
   return {
     isPhone,

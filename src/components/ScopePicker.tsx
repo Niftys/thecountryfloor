@@ -45,7 +45,7 @@ export function ScopePicker({
   }
 
   return (
-    <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 1.25, md: 2 }} sx={{ mb: { xs: 1.5, md: 2 } }}>
+    <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 1.25, md: 2 }} sx={{ mb: 0 }}>
       <FormControl sx={{ minWidth: { xs: "100%", sm: 200, md: 280 }, flex: 1 }} size={isPhone ? "small" : "medium"}>
         <InputLabel id="competition-select">Competition</InputLabel>
         <Select

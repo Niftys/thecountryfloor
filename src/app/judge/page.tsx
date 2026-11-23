@@ -47,11 +47,27 @@ export default async function JudgePage({ searchParams }: Props) {
       ? await loadJudgeBoard(competition.id, session.id, scoringJudgeId)
       : null;
 
+  const scopeSlot =
+    activeCompetitions.length > 0 && competition ? (
+      <Suspense fallback={null}>
+        <ScopePicker
+          competitions={activeCompetitions.map((item) => ({
+            id: item.id,
+            label: item.name,
+          }))}
+          sessions={sessions.map((item) => ({ id: item.id, label: item.name }))}
+          competitionId={competition.id}
+          sessionId={session?.id}
+        />
+      </Suspense>
+    ) : null;
+
   return (
     <AppShell
       title="Judge"
       role={user.role}
       displayName={user.displayName}
+      scoringFocus
       links={
         user.role === "ADMIN"
           ? [
@@ -73,20 +89,6 @@ export default async function JudgePage({ searchParams }: Props) {
           : []
       }
     >
-      {activeCompetitions.length > 0 && competition ? (
-        <Suspense fallback={null}>
-          <ScopePicker
-            competitions={activeCompetitions.map((item) => ({
-              id: item.id,
-              label: item.name,
-            }))}
-            sessions={sessions.map((item) => ({ id: item.id, label: item.name }))}
-            competitionId={competition.id}
-            sessionId={session?.id}
-          />
-        </Suspense>
-      ) : null}
-
       {inactiveRequested ? (
         <Alert severity="warning">
           {requested?.name ?? "This competition"} is inactive. Ask an admin to mark it active, or choose
@@ -108,6 +110,7 @@ export default async function JudgePage({ searchParams }: Props) {
           heats={board.heats}
           asJudgeId={user.role === "ADMIN" ? scoringJudgeId : undefined}
           panelJudges={user.role === "ADMIN" ? board.panel : []}
+          scopeSlot={scopeSlot}
         />
       )}
     </AppShell>

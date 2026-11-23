@@ -1,5 +1,8 @@
 "use client";
 
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -21,6 +24,7 @@ import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
@@ -82,6 +86,8 @@ type Props = {
   heats: HeatState[];
   asJudgeId?: string;
   panelJudges?: { id: string; label: string }[];
+  /** Competition / session pickers rendered inside Session settings. */
+  scopeSlot?: ReactNode;
 };
 
 type SyncStatus = "idle" | "saved-local" | "syncing" | "confirmed";
@@ -191,11 +197,13 @@ export function JudgeBoard({
   heats: initial,
   asJudgeId,
   panelJudges = [],
+  scopeSlot,
 }: Props) {
   const router = useRouter();
-  const { judgeChromePx, isPhone, isPortrait, denseChrome } = useResponsiveLayout();
+  const { judgeChromePx, isPhone } = useResponsiveLayout();
   const [heats, setHeats] = useState(initial);
   const [heatNumber, setHeatNumber] = useState(initial[0]?.number ?? 1);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [scratchTarget, setScratchTarget] = useState<{
     heatId: string;
@@ -493,126 +501,182 @@ export function JudgeBoard({
     setConfirmOpen(true);
   }
 
+  const chromePx = judgeChromePx({ compact, settingsOpen });
+
+  const settingsControls = (
+    <Stack spacing={1.5}>
+      {scopeSlot}
+      {!compact ? (
+        <Box>
+          <Typography variant="h5">{competitionName}</Typography>
+          <Typography color="text.secondary">{sessionName}</Typography>
+        </Box>
+      ) : (
+        <Typography variant="body2" color="text.secondary">
+          {competitionName} · {sessionName}
+        </Typography>
+      )}
+      <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+        <FormControlLabel
+          control={
+            <Switch
+              checked={compact}
+              size={isPhone ? "small" : "medium"}
+              onChange={(event) =>
+                setDensityAndPersist(event.target.checked ? "compact" : "comfortable")
+              }
+              inputProps={{ "aria-label": "Compact fit-screen layout" }}
+            />
+          }
+          label={compact ? "Compact layout" : "Comfortable layout"}
+          sx={{
+            mr: 1,
+            "& .MuiFormControlLabel-label": {
+              fontWeight: 700,
+              fontSize: { xs: "0.85rem", md: "0.95rem" },
+            },
+          }}
+        />
+        <Chip
+          label={syncChip.label}
+          color={syncChip.color}
+          variant="outlined"
+          size={compact || isPhone ? "small" : "medium"}
+        />
+        {queueCount > 0 ? (
+          <Button
+            variant="outlined"
+            size={compact || isPhone ? "small" : "medium"}
+            onClick={() => void tryFlush()}
+          >
+            Retry sync
+          </Button>
+        ) : null}
+        {panelJudges.length > 0 && asJudgeId ? (
+          <FormControl
+            sx={{
+              minWidth: { xs: 120, sm: 160 },
+              flex: { xs: "1 1 140px", sm: "0 0 auto" },
+            }}
+            size={compact || isPhone ? "small" : "medium"}
+          >
+            <InputLabel id="as-judge-select">Score as</InputLabel>
+            <Select
+              labelId="as-judge-select"
+              label="Score as"
+              value={asJudgeId}
+              onChange={(event) => {
+                const url = new URL(window.location.href);
+                url.searchParams.set("asJudgeId", event.target.value);
+                router.push(`${url.pathname}?${url.searchParams.toString()}`);
+              }}
+            >
+              {panelJudges.map((judge) => (
+                <MenuItem key={judge.id} value={judge.id}>
+                  {judge.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        ) : null}
+        <FormControl
+          sx={{
+            minWidth: { xs: 140, sm: 220 },
+            flex: { xs: "1 1 160px", sm: "0 0 auto" },
+          }}
+          size={compact || isPhone ? "small" : "medium"}
+        >
+          <InputLabel id="heat-select">Jump to heat</InputLabel>
+          <Select
+            labelId="heat-select"
+            label="Jump to heat"
+            value={heat.number}
+            onChange={(event) => requestHeatChange(Number(event.target.value))}
+            MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
+          >
+            {heats.map((item) => {
+              const style = item.groups[0]?.danceName ?? "—";
+              return (
+                <MenuItem key={item.id} value={item.number}>
+                  Heat {item.number} · {style}
+                  {item.submitted ? " · done" : ""}
+                </MenuItem>
+              );
+            })}
+          </Select>
+        </FormControl>
+      </Stack>
+    </Stack>
+  );
+
   return (
     <Stack
-      spacing={compact ? 1 : 2}
+      spacing={compact ? 0.75 : 2}
       sx={
         compact
           ? {
-              height: `calc(100dvh - ${judgeChromePx}px)`,
-              maxHeight: `calc(100dvh - ${judgeChromePx}px)`,
+              height: `calc(100dvh - ${chromePx}px)`,
+              maxHeight: `calc(100dvh - ${chromePx}px)`,
               overflow: "hidden",
             }
           : undefined
       }
     >
-      <Stack
-        direction={{ xs: "column", lg: "row" }}
-        spacing={compact || denseChrome ? 1 : 2}
-        alignItems={{ lg: "center" }}
-        justifyContent="space-between"
-        sx={compact ? { flexShrink: 0 } : undefined}
+      <Accordion
+        disableGutters
+        elevation={0}
+        expanded={settingsOpen}
+        onChange={(_, open) => setSettingsOpen(open)}
+        sx={{
+          flexShrink: 0,
+          border: "1px solid",
+          borderColor: "divider",
+          borderRadius: "10px !important",
+          bgcolor: "background.paper",
+          "&:before": { display: "none" },
+        }}
       >
-        {compact || (isPhone && isPortrait) ? (
-          <Typography
-            variant="subtitle1"
-            fontWeight={700}
-            noWrap
-            sx={{ maxWidth: { xs: "100%", sm: 280 } }}
-          >
-            {compact ? sessionName : competitionName}
+        <AccordionSummary
+          expandIcon={
+            <Typography component="span" fontWeight={800} sx={{ px: 0.5 }}>
+              {settingsOpen ? "▴" : "▾"}
+            </Typography>
+          }
+          sx={{
+            minHeight: { xs: 44, sm: 48 },
+            px: 1.5,
+            "& .MuiAccordionSummary-content": { my: 0.75, alignItems: "center", gap: 1 },
+          }}
+        >
+          <Typography fontWeight={800} sx={{ fontSize: { xs: "0.95rem", sm: "1.05rem" } }}>
+            Session settings
           </Typography>
-        ) : (
-          <Box>
-            <Typography variant="h5">{competitionName}</Typography>
-            <Typography color="text.secondary">{sessionName}</Typography>
-          </Box>
-        )}
-        <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
-          <FormControlLabel
-            control={
-              <Switch
-                checked={compact}
-                size={isPhone ? "small" : "medium"}
-                onChange={(event) =>
-                  setDensityAndPersist(event.target.checked ? "compact" : "comfortable")
-                }
-                inputProps={{ "aria-label": "Compact fit-screen layout" }}
-              />
-            }
-            label={compact ? "Compact" : "Comfortable"}
-            sx={{
-              mr: 1,
-              "& .MuiFormControlLabel-label": {
-                fontWeight: 700,
-                fontSize: { xs: "0.85rem", md: "0.95rem" },
-              },
-            }}
-          />
-          <Chip
-            label={syncChip.label}
-            color={syncChip.color}
-            variant="outlined"
-            size={compact || isPhone ? "small" : "medium"}
-          />
-          {queueCount > 0 ? (
-            <Button
+          {!settingsOpen ? (
+            <Typography
+              color="text.secondary"
+              noWrap
+              sx={{ fontSize: "0.85rem", flex: 1, minWidth: 0 }}
+            >
+              {sessionName}
+              {asJudgeId
+                ? ` · ${panelJudges.find((j) => j.id === asJudgeId)?.label ?? "judge"}`
+                : ""}
+              {` · Heat ${heat.number}`}
+              {heat.submitted ? " · done" : ""}
+            </Typography>
+          ) : null}
+          {!settingsOpen ? (
+            <Chip
+              label={syncChip.label}
+              color={syncChip.color}
+              size="small"
               variant="outlined"
-              size={compact || isPhone ? "small" : "medium"}
-              onClick={() => void tryFlush()}
-            >
-              Retry sync
-            </Button>
+              sx={{ ml: "auto" }}
+            />
           ) : null}
-          {panelJudges.length > 0 && asJudgeId ? (
-            <FormControl
-              sx={{ minWidth: { xs: 120, sm: compact ? 140 : 200 }, flex: { xs: "1 1 140px", sm: "0 0 auto" } }}
-              size={compact || isPhone ? "small" : "medium"}
-            >
-              <InputLabel id="as-judge-select">Score as</InputLabel>
-              <Select
-                labelId="as-judge-select"
-                label="Score as"
-                value={asJudgeId}
-                onChange={(event) => {
-                  const url = new URL(window.location.href);
-                  url.searchParams.set("asJudgeId", event.target.value);
-                  router.push(`${url.pathname}?${url.searchParams.toString()}`);
-                }}
-              >
-                {panelJudges.map((judge) => (
-                  <MenuItem key={judge.id} value={judge.id}>
-                    {judge.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          ) : null}
-          <FormControl
-            sx={{ minWidth: { xs: 140, sm: compact ? 160 : 280 }, flex: { xs: "1 1 160px", sm: "0 0 auto" } }}
-            size={compact || isPhone ? "small" : "medium"}
-          >
-            <InputLabel id="heat-select">Heat</InputLabel>
-            <Select
-              labelId="heat-select"
-              label="Heat"
-              value={heat.number}
-              onChange={(event) => requestHeatChange(Number(event.target.value))}
-              MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
-            >
-              {heats.map((item) => {
-                const style = item.groups[0]?.danceName ?? "—";
-                return (
-                  <MenuItem key={item.id} value={item.number}>
-                    Heat {item.number} · {style}
-                    {item.submitted ? " · done" : ""}
-                  </MenuItem>
-                );
-              })}
-            </Select>
-          </FormControl>
-        </Stack>
-      </Stack>
+        </AccordionSummary>
+        <AccordionDetails sx={{ pt: 0, px: 1.5, pb: 1.5 }}>{settingsControls}</AccordionDetails>
+      </Accordion>
 
       <Card
         sx={
