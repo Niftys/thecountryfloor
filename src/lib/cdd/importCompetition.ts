@@ -67,7 +67,7 @@ export async function importCddCompetition(raw: unknown) {
           id,
           name: dance.name,
           abbrev: dance.abbrev,
-          sortOrder: dance.sortOrder ?? danceOrder(dance.abbrev) || index + 1,
+          sortOrder: dance.sortOrder ?? (danceOrder(dance.abbrev) || index + 1),
         };
       })
       .sort((a, b) => a.sortOrder - b.sortOrder);
