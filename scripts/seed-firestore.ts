@@ -324,7 +324,7 @@ async function main() {
   await rebuildSessionLive(cedarId, cedarSess);
 
   console.log("Seed complete.");
-  console.log("Logins (password demo): admin, scrutineer, d.appel, …");
+  console.log("Logins (password demo12): admin, scrutineer, d.appel, …");
 }
 
 main().catch((error) => {

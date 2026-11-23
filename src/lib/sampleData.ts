@@ -1,6 +1,6 @@
 import type { Scale } from "./scoring";
 
-export const SAMPLE_PASSWORD = "demo";
+export const SAMPLE_PASSWORD = "demo12";
 
 export const JUDGES = ["D. APPEL", "K. LINKOUS", "S. HANSEN", "C. GRABER", "R. CHAMPION"] as const;
 

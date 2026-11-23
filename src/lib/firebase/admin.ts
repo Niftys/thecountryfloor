@@ -37,6 +37,4 @@ const app = initAdmin();
 export const adminAuth = getAuth(app);
 export const adminDb = getFirestore(app);
 
-export function authEmailForUsername(username: string) {
-  return `${username.trim().toLowerCase()}@users.thecountryfloor.local`;
-}
+export { authEmailForUsername } from "./usernames";

@@ -33,7 +33,7 @@ type Props = {
 const emptyForm = {
   username: "",
   displayName: "",
-  password: "demo",
+  password: "demo12",
   role: "JUDGE",
 };
 

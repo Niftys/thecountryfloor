@@ -8,15 +8,16 @@ import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { signInWithCustomToken } from "firebase/auth";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { getClientAuth } from "@/lib/firebase/client";
+import { authEmailForUsername } from "@/lib/firebase/usernames";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("scrutineer");
-  const [password, setPassword] = useState("demo");
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("demo12");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -24,30 +25,37 @@ export default function LoginPage() {
     event.preventDefault();
     setBusy(true);
     setError("");
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-    const body = (await response.json().catch(() => null)) as {
-      customToken?: string;
-      error?: string;
-    } | null;
-    if (!response.ok) {
-      setBusy(false);
-      setError("Username or password is wrong.");
-      return;
-    }
     try {
-      if (body?.customToken) {
-        await signInWithCustomToken(getClientAuth(), body.customToken);
+      const email = authEmailForUsername(username);
+      const credential = await signInWithEmailAndPassword(getClientAuth(), email, password);
+      const idToken = await credential.user.getIdToken(true);
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) {
+        setError(body?.error ?? "Could not start session.");
+        setBusy(false);
+        return;
       }
-    } catch {
-      // Session cookie still works for SSR; live listeners may need emulator/auth.
+      router.push("/");
+      router.refresh();
+    } catch (err) {
+      const code =
+        err && typeof err === "object" && "code" in err ? String((err as { code: string }).code) : "";
+      if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") {
+        setError("Username or password is wrong.");
+      } else if (code === "auth/unauthorized-domain") {
+        setError("This site’s domain is not authorized in Firebase Auth.");
+      } else if (code === "auth/api-key-not-valid" || code === "auth/invalid-api-key") {
+        setError("Firebase API key is missing or invalid on this deploy.");
+      } else {
+        setError(code ? `Sign-in failed (${code}).` : "Sign-in failed.");
+      }
+      setBusy(false);
     }
-    setBusy(false);
-    router.push("/");
-    router.refresh();
   }
 
   return (
@@ -66,7 +74,7 @@ export default function LoginPage() {
             <Box>
               <Typography variant="h4">Countryfloor</Typography>
               <Typography color="text.secondary">
-                ACDA judging for tablets. Sample logins use password <strong>demo</strong>.
+                ACDA judging for tablets. Sample logins use password <strong>demo12</strong>.
               </Typography>
             </Box>
             {error ? <Alert severity="error">{error}</Alert> : null}

@@ -39,7 +39,7 @@ npm run dev
 
 ### Sample logins
 
-Password: `demo`
+Password: `demo12`
 
 - `admin`
 - `scrutineer`
