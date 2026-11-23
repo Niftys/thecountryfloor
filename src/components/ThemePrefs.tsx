@@ -36,6 +36,7 @@ export function ThemePrefsProvider({ children }: { children: React.ReactNode }) 
   }
 
   const theme = useMemo(() => {
+    const bump = prefs.largeType ? 1.12 : 1;
     return createTheme(baseTheme, {
       palette: prefs.highContrast
         ? {
@@ -49,26 +50,39 @@ export function ThemePrefsProvider({ children }: { children: React.ReactNode }) 
           }
         : {},
       typography: {
-        fontSize: prefs.largeType ? 22 : 18,
-        h4: { fontWeight: 800, fontSize: prefs.largeType ? "2.4rem" : undefined },
-        h5: { fontWeight: 800, fontSize: prefs.largeType ? "1.9rem" : undefined },
-        h6: { fontWeight: 700, fontSize: prefs.largeType ? "1.5rem" : undefined },
-        button: {
-          textTransform: "none",
-          fontWeight: 700,
-          fontSize: prefs.largeType ? "1.2rem" : "1.05rem",
-        },
+        fontSize: Math.round(16 * bump),
+        h4: { fontWeight: 800 },
+        h5: { fontWeight: 800 },
+        h6: { fontWeight: 700 },
+        button: { textTransform: "none", fontWeight: 800 },
       },
       components: {
         MuiToggleButton: {
           styleOverrides: {
-            root: {
-              minWidth: prefs.largeType ? 104 : 88,
-              minHeight: prefs.largeType ? 104 : 88,
-              padding: "12px 16px",
-              fontSize: prefs.largeType ? "2rem" : "1.75rem",
+            root: ({ theme: t }) => ({
+              minWidth: 52 * bump,
+              minHeight: 52 * bump,
+              padding: "8px 10px",
+              fontSize: `${1.15 * bump}rem`,
               fontWeight: 800,
               lineHeight: 1,
+              [t.breakpoints.up("sm")]: {
+                minWidth: 72 * bump,
+                minHeight: 72 * bump,
+                padding: "10px 12px",
+                fontSize: `${1.45 * bump}rem`,
+              },
+              [t.breakpoints.up("md")]: {
+                minWidth: 88 * bump,
+                minHeight: 88 * bump,
+                padding: "12px 16px",
+                fontSize: `${1.75 * bump}rem`,
+              },
+              [t.breakpoints.up("lg")]: {
+                minWidth: 96 * bump,
+                minHeight: 96 * bump,
+                fontSize: `${1.85 * bump}rem`,
+              },
               ...(prefs.highContrast
                 ? {
                     borderWidth: 2,
@@ -76,7 +90,16 @@ export function ThemePrefsProvider({ children }: { children: React.ReactNode }) 
                     "&.Mui-selected": { bgcolor: "#000", color: "#fff" },
                   }
                 : {}),
-            },
+            }),
+          },
+        },
+        MuiButton: {
+          styleOverrides: {
+            root: ({ theme: t }) => ({
+              minHeight: 44 * bump,
+              [t.breakpoints.up("sm")]: { minHeight: 52 * bump },
+              [t.breakpoints.up("md")]: { minHeight: 56 * bump },
+            }),
           },
         },
       },
@@ -101,12 +124,17 @@ export function ThemePrefsToggles() {
       <FormControlLabel
         sx={{
           color: "inherit",
-          mr: 0.5,
-          "& .MuiFormControlLabel-label": { fontSize: "1.05rem", fontWeight: 700 },
+          mr: { xs: 0, sm: 0.5 },
+          "& .MuiFormControlLabel-label": {
+            fontSize: { xs: "0.8rem", sm: "0.95rem", md: "1.05rem" },
+            fontWeight: 700,
+            display: { xs: "none", sm: "block" },
+          },
         }}
         control={
           <Switch
             color="default"
+            size="small"
             checked={prefs.largeType}
             onChange={(event) => setPrefs({ ...prefs, largeType: event.target.checked })}
             inputProps={{ "aria-label": "Larger text" }}
@@ -117,12 +145,17 @@ export function ThemePrefsToggles() {
       <FormControlLabel
         sx={{
           color: "inherit",
-          mr: 1,
-          "& .MuiFormControlLabel-label": { fontSize: "1.05rem", fontWeight: 700 },
+          mr: { xs: 0.5, sm: 1 },
+          "& .MuiFormControlLabel-label": {
+            fontSize: { xs: "0.8rem", sm: "0.95rem", md: "1.05rem" },
+            fontWeight: 700,
+            display: { xs: "none", sm: "block" },
+          },
         }}
         control={
           <Switch
             color="default"
+            size="small"
             checked={prefs.highContrast}
             onChange={(event) => setPrefs({ ...prefs, highContrast: event.target.checked })}
             inputProps={{ "aria-label": "High contrast" }}

@@ -66,29 +66,28 @@ export default function LoginPage() {
   return (
     <Box
       sx={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
         display: "grid",
         placeItems: "center",
-        p: 3,
+        p: { xs: 2, sm: 3 },
         bgcolor: "background.default",
       }}
     >
       <Card sx={{ width: "100%", maxWidth: 560, boxShadow: 4 }}>
-        <CardContent sx={{ p: { xs: 3, sm: 4.5 } }}>
-          <Stack spacing={3} component="form" onSubmit={onSubmit}>
+        <CardContent sx={{ p: { xs: 2.5, sm: 3.5, md: 4.5 } }}>
+          <Stack spacing={{ xs: 2, sm: 3 }} component="form" onSubmit={onSubmit}>
             <Box>
               <Typography variant="h4" component="h1">
                 Countryfloor
               </Typography>
-              <Typography color="text.secondary" sx={{ mt: 1, fontSize: "1.15rem" }}>
+              <Typography
+                color="text.secondary"
+                sx={{ mt: 1, fontSize: { xs: "1rem", sm: "1.15rem" } }}
+              >
                 Sign in with the username and password your admin gave you.
               </Typography>
             </Box>
-            {error ? (
-              <Alert severity="error" sx={{ fontSize: "1.15rem" }}>
-                {error}
-              </Alert>
-            ) : null}
+            {error ? <Alert severity="error">{error}</Alert> : null}
             <TextField
               label="Username"
               value={username}
@@ -97,8 +96,9 @@ export default function LoginPage() {
               autoFocus
               fullWidth
               required
-              inputProps={{ style: { fontSize: "1.25rem", paddingTop: 16, paddingBottom: 16 } }}
-              InputLabelProps={{ sx: { fontSize: "1.15rem" } }}
+              inputProps={{
+                style: { fontSize: "1.15rem", paddingTop: 14, paddingBottom: 14 },
+              }}
             />
             <TextField
               label="Password"
@@ -108,15 +108,16 @@ export default function LoginPage() {
               autoComplete="current-password"
               fullWidth
               required
-              inputProps={{ style: { fontSize: "1.25rem", paddingTop: 16, paddingBottom: 16 } }}
-              InputLabelProps={{ sx: { fontSize: "1.15rem" } }}
+              inputProps={{
+                style: { fontSize: "1.15rem", paddingTop: 14, paddingBottom: 14 },
+              }}
             />
             <Button
               type="submit"
               variant="contained"
               disabled={busy}
               fullWidth
-              sx={{ minHeight: 64, fontSize: "1.35rem" }}
+              sx={{ minHeight: { xs: 52, md: 64 }, fontSize: { xs: "1.15rem", md: "1.35rem" } }}
             >
               {busy ? "Signing in…" : "Sign in"}
             </Button>

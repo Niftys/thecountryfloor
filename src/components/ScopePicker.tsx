@@ -5,8 +5,8 @@ import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Select from "@mui/material/Select";
-import Typography from "@mui/material/Typography";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 
 export type ScopeOption = { id: string; label: string };
 
@@ -32,6 +32,7 @@ export function ScopePicker({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { isPhone } = useResponsiveLayout();
 
   function go(patch: Record<string, string | undefined>) {
     const next = new URLSearchParams(searchParams.toString());
@@ -44,69 +45,67 @@ export function ScopePicker({
   }
 
   return (
-    <Stack spacing={1} sx={{ mb: 2 }}>
-      <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-        <FormControl sx={{ minWidth: 280, flex: 1 }} size="medium">
-          <InputLabel id="competition-select">Competition</InputLabel>
+    <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 1.25, md: 2 }} sx={{ mb: { xs: 1.5, md: 2 } }}>
+      <FormControl sx={{ minWidth: { xs: "100%", sm: 200, md: 280 }, flex: 1 }} size={isPhone ? "small" : "medium"}>
+        <InputLabel id="competition-select">Competition</InputLabel>
+        <Select
+          labelId="competition-select"
+          label="Competition"
+          value={competitionId}
+          MenuProps={MENU_PROPS}
+          onChange={(event) =>
+            go({
+              competitionId: event.target.value,
+              sessionId: undefined,
+              divisionId: undefined,
+            })
+          }
+        >
+          {competitions.map((item) => (
+            <MenuItem key={item.id} value={item.id}>
+              {item.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      {sessions.length > 0 && sessionId ? (
+        <FormControl sx={{ minWidth: { xs: "100%", sm: 180, md: 220 }, flex: 1 }} size={isPhone ? "small" : "medium"}>
+          <InputLabel id="session-select">Session</InputLabel>
           <Select
-            labelId="competition-select"
-            label="Competition"
-            value={competitionId}
+            labelId="session-select"
+            label="Session"
+            value={sessionId}
             MenuProps={MENU_PROPS}
-            onChange={(event) =>
-              go({
-                competitionId: event.target.value,
-                sessionId: undefined,
-                divisionId: undefined,
-              })
-            }
+            onChange={(event) => go({ sessionId: event.target.value })}
           >
-            {competitions.map((item) => (
+            {sessions.map((item) => (
               <MenuItem key={item.id} value={item.id}>
                 {item.label}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
+      ) : null}
 
-        {sessions.length > 0 && sessionId ? (
-          <FormControl sx={{ minWidth: 220, flex: 1 }} size="medium">
-            <InputLabel id="session-select">Session</InputLabel>
-            <Select
-              labelId="session-select"
-              label="Session"
-              value={sessionId}
-              MenuProps={MENU_PROPS}
-              onChange={(event) => go({ sessionId: event.target.value })}
-            >
-              {sessions.map((item) => (
-                <MenuItem key={item.id} value={item.id}>
-                  {item.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        ) : null}
-
-        {divisions.length > 0 && divisionId ? (
-          <FormControl sx={{ minWidth: 220, flex: 1 }} size="medium">
-            <InputLabel id="division-select">Division</InputLabel>
-            <Select
-              labelId="division-select"
-              label="Division"
-              value={divisionId}
-              MenuProps={MENU_PROPS}
-              onChange={(event) => go({ divisionId: event.target.value })}
-            >
-              {divisions.map((item) => (
-                <MenuItem key={item.id} value={item.id}>
-                  {item.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        ) : null}
-      </Stack>
+      {divisions.length > 0 && divisionId ? (
+        <FormControl sx={{ minWidth: { xs: "100%", sm: 180, md: 220 }, flex: 1 }} size={isPhone ? "small" : "medium"}>
+          <InputLabel id="division-select">Division</InputLabel>
+          <Select
+            labelId="division-select"
+            label="Division"
+            value={divisionId}
+            MenuProps={MENU_PROPS}
+            onChange={(event) => go({ divisionId: event.target.value })}
+          >
+            {divisions.map((item) => (
+              <MenuItem key={item.id} value={item.id}>
+                {item.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      ) : null}
     </Stack>
   );
 }

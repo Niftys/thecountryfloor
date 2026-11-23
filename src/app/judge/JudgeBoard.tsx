@@ -23,6 +23,7 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import {
   enqueueOfflineSubmit,
   flushOfflineQueue,
@@ -106,42 +107,54 @@ function snapshotHeat(heat: HeatState) {
   );
 }
 
-function BibBox({ bib, large }: { bib: number; large?: boolean }) {
+function BibBox({ bib }: { bib: number }) {
   return (
     <Box
       sx={{
         bgcolor: "#000",
         color: "#fff",
-        px: large ? 2.5 : 2,
-        py: large ? 1.5 : 1,
-        minWidth: large ? 96 : 72,
+        px: { xs: 1.5, md: 2 },
+        py: { xs: 0.75, md: 1 },
+        minWidth: { xs: 56, sm: 64, md: 72 },
         textAlign: "center",
         borderRadius: 1,
       }}
     >
-      <Typography sx={{ fontSize: large ? "2.4rem" : "2rem", fontWeight: 800, lineHeight: 1.1 }}>
+      <Typography
+        sx={{
+          fontSize: { xs: "1.45rem", sm: "1.75rem", md: "2rem" },
+          fontWeight: 800,
+          lineHeight: 1.1,
+        }}
+      >
         {bib}
       </Typography>
     </Box>
   );
 }
 
-function MedalBadge({ medal, large }: { medal: string; large?: boolean }) {
+function MedalBadge({ medal }: { medal: string }) {
   const colors = MEDAL_COLORS[medal] ?? { bg: "#212121", fg: "#fff" };
   return (
     <Box
       sx={{
         bgcolor: colors.bg,
         color: colors.fg,
-        px: large ? 2.5 : 2,
-        py: large ? 1.5 : 1,
-        minWidth: large ? 96 : 80,
+        px: { xs: 1.5, md: 2 },
+        py: { xs: 0.75, md: 1 },
+        minWidth: { xs: 56, sm: 64, md: 80 },
         textAlign: "center",
         borderRadius: 1,
         border: "3px solid #000",
       }}
     >
-      <Typography sx={{ fontSize: large ? "2.4rem" : "2rem", fontWeight: 900, lineHeight: 1.1 }}>
+      <Typography
+        sx={{
+          fontSize: { xs: "1.45rem", sm: "1.75rem", md: "2rem" },
+          fontWeight: 900,
+          lineHeight: 1.1,
+        }}
+      >
         {medal}
       </Typography>
     </Box>
@@ -180,6 +193,7 @@ export function JudgeBoard({
   panelJudges = [],
 }: Props) {
   const router = useRouter();
+  const { judgeChromePx, isPhone, isPortrait, denseChrome } = useResponsiveLayout();
   const [heats, setHeats] = useState(initial);
   const [heatNumber, setHeatNumber] = useState(initial[0]?.number ?? 1);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -485,24 +499,28 @@ export function JudgeBoard({
       sx={
         compact
           ? {
-              // App bar + scope picker + page padding on portrait iPad
-              height: "calc(100dvh - 200px)",
-              maxHeight: "calc(100dvh - 200px)",
+              height: `calc(100dvh - ${judgeChromePx}px)`,
+              maxHeight: `calc(100dvh - ${judgeChromePx}px)`,
               overflow: "hidden",
             }
           : undefined
       }
     >
       <Stack
-        direction={{ xs: "column", md: "row" }}
-        spacing={compact ? 1 : 2}
-        alignItems={{ md: "center" }}
+        direction={{ xs: "column", lg: "row" }}
+        spacing={compact || denseChrome ? 1 : 2}
+        alignItems={{ lg: "center" }}
         justifyContent="space-between"
         sx={compact ? { flexShrink: 0 } : undefined}
       >
-        {compact ? (
-          <Typography variant="subtitle1" fontWeight={700} noWrap sx={{ maxWidth: 220 }}>
-            {sessionName}
+        {compact || (isPhone && isPortrait) ? (
+          <Typography
+            variant="subtitle1"
+            fontWeight={700}
+            noWrap
+            sx={{ maxWidth: { xs: "100%", sm: 280 } }}
+          >
+            {compact ? sessionName : competitionName}
           </Typography>
         ) : (
           <Box>
@@ -515,23 +533,42 @@ export function JudgeBoard({
             control={
               <Switch
                 checked={compact}
+                size={isPhone ? "small" : "medium"}
                 onChange={(event) =>
                   setDensityAndPersist(event.target.checked ? "compact" : "comfortable")
                 }
                 inputProps={{ "aria-label": "Compact fit-screen layout" }}
               />
             }
-            label={compact ? "Compact (fit screen)" : "Comfortable"}
-            sx={{ mr: 1, "& .MuiFormControlLabel-label": { fontWeight: 700, fontSize: "0.95rem" } }}
+            label={compact ? "Compact" : "Comfortable"}
+            sx={{
+              mr: 1,
+              "& .MuiFormControlLabel-label": {
+                fontWeight: 700,
+                fontSize: { xs: "0.85rem", md: "0.95rem" },
+              },
+            }}
           />
-          <Chip label={syncChip.label} color={syncChip.color} variant="outlined" size={compact ? "small" : "medium"} />
+          <Chip
+            label={syncChip.label}
+            color={syncChip.color}
+            variant="outlined"
+            size={compact || isPhone ? "small" : "medium"}
+          />
           {queueCount > 0 ? (
-            <Button variant="outlined" size={compact ? "small" : "medium"} onClick={() => void tryFlush()}>
+            <Button
+              variant="outlined"
+              size={compact || isPhone ? "small" : "medium"}
+              onClick={() => void tryFlush()}
+            >
               Retry sync
             </Button>
           ) : null}
           {panelJudges.length > 0 && asJudgeId ? (
-            <FormControl sx={{ minWidth: compact ? 140 : 200 }} size={compact ? "small" : "medium"}>
+            <FormControl
+              sx={{ minWidth: { xs: 120, sm: compact ? 140 : 200 }, flex: { xs: "1 1 140px", sm: "0 0 auto" } }}
+              size={compact || isPhone ? "small" : "medium"}
+            >
               <InputLabel id="as-judge-select">Score as</InputLabel>
               <Select
                 labelId="as-judge-select"
@@ -551,7 +588,10 @@ export function JudgeBoard({
               </Select>
             </FormControl>
           ) : null}
-          <FormControl sx={{ minWidth: compact ? 160 : 280 }} size={compact ? "small" : "medium"}>
+          <FormControl
+            sx={{ minWidth: { xs: 140, sm: compact ? 160 : 280 }, flex: { xs: "1 1 160px", sm: "0 0 auto" } }}
+            size={compact || isPhone ? "small" : "medium"}
+          >
             <InputLabel id="heat-select">Heat</InputLabel>
             <Select
               labelId="heat-select"
@@ -609,18 +649,21 @@ export function JudgeBoard({
               onClick={() => prevHeat && requestHeatChange(prevHeat.number)}
               aria-label="Previous heat"
               sx={{
-                minWidth: compact ? 56 : { xs: 72, sm: 120 },
-                minHeight: compact ? 48 : 88,
-                fontSize: compact ? "0.95rem" : { xs: "1.1rem", sm: "1.25rem" },
+                minWidth: compact ? { xs: 44, sm: 56 } : { xs: 56, sm: 88, md: 120 },
+                minHeight: compact ? { xs: 40, sm: 48 } : { xs: 56, sm: 72, md: 88 },
+                fontSize: compact ? "0.9rem" : { xs: "1rem", sm: "1.15rem", md: "1.25rem" },
                 lineHeight: 1.15,
-                px: compact ? 1 : 2,
+                px: compact ? 0.75 : { xs: 1, md: 2 },
                 flexDirection: "column",
               }}
             >
-              <Box component="span" sx={{ fontSize: compact ? "1.25rem" : "2rem", lineHeight: 1 }}>
+              <Box
+                component="span"
+                sx={{ fontSize: compact ? "1.1rem" : { xs: "1.4rem", md: "2rem" }, lineHeight: 1 }}
+              >
                 ‹
               </Box>
-              {compact ? null : "Prev"}
+              {compact || isPhone ? null : "Prev"}
             </Button>
             <Box sx={{ flex: 1, textAlign: "center", px: 0.5, minWidth: 0 }}>
               <Typography
@@ -656,18 +699,21 @@ export function JudgeBoard({
               onClick={() => nextHeat && requestHeatChange(nextHeat.number)}
               aria-label="Next heat"
               sx={{
-                minWidth: compact ? 56 : { xs: 72, sm: 120 },
-                minHeight: compact ? 48 : 88,
-                fontSize: compact ? "0.95rem" : { xs: "1.1rem", sm: "1.25rem" },
+                minWidth: compact ? { xs: 44, sm: 56 } : { xs: 56, sm: 88, md: 120 },
+                minHeight: compact ? { xs: 40, sm: 48 } : { xs: 56, sm: 72, md: 88 },
+                fontSize: compact ? "0.9rem" : { xs: "1rem", sm: "1.15rem", md: "1.25rem" },
                 lineHeight: 1.15,
-                px: compact ? 1 : 2,
+                px: compact ? 0.75 : { xs: 1, md: 2 },
                 flexDirection: "column",
               }}
             >
-              <Box component="span" sx={{ fontSize: compact ? "1.25rem" : "2rem", lineHeight: 1 }}>
+              <Box
+                component="span"
+                sx={{ fontSize: compact ? "1.1rem" : { xs: "1.4rem", md: "2rem" }, lineHeight: 1 }}
+              >
                 ›
               </Box>
-              {compact ? null : "Next"}
+              {compact || isPhone ? null : "Next"}
             </Button>
           </Stack>
 
@@ -821,7 +867,7 @@ export function JudgeBoard({
                             >
                               <Box
                                 sx={{
-                                  width: 72,
+                                  width: { xs: 52, sm: 64, md: 72 },
                                   flexShrink: 0,
                                   alignSelf: "stretch",
                                   display: "flex",
@@ -830,13 +876,13 @@ export function JudgeBoard({
                                   bgcolor: "#0a0a0a",
                                   color: "#fff",
                                   borderRadius: 1.25,
-                                  minHeight: 52,
+                                  minHeight: { xs: 44, sm: 52 },
                                 }}
                               >
                                 <Typography
                                   sx={{
                                     fontWeight: 900,
-                                    fontSize: "1.85rem",
+                                    fontSize: { xs: "1.35rem", sm: "1.65rem", md: "1.85rem" },
                                     lineHeight: 1,
                                     fontVariantNumeric: "tabular-nums",
                                   }}
@@ -888,10 +934,13 @@ export function JudgeBoard({
                                         sx={{
                                           flex: "1 1 0",
                                           minWidth: "0 !important",
-                                          minHeight: "34px !important",
-                                          height: "34px !important",
+                                          minHeight: { xs: "30px !important", sm: "34px !important" },
+                                          height: { xs: "30px !important", sm: "34px !important" },
                                           p: "2px !important",
-                                          fontSize: "0.8rem !important",
+                                          fontSize: {
+                                            xs: "0.7rem !important",
+                                            sm: "0.8rem !important",
+                                          },
                                           fontWeight: 900,
                                           lineHeight: 1,
                                           borderColor: `${colors.bg} !important`,
@@ -1064,7 +1113,7 @@ export function JudgeBoard({
                                 sx={{
                                   display: "flex",
                                   flexWrap: "wrap",
-                                  gap: 1.5,
+                                  gap: { xs: 0.75, md: 1.5 },
                                   "& .MuiToggleButtonGroup-grouped": {
                                     border: "3px solid",
                                     margin: 0,
@@ -1080,17 +1129,18 @@ export function JudgeBoard({
                                       key={medal}
                                       value={medal}
                                       sx={{
-                                        minWidth: 100,
-                                        minHeight: 100,
-                                        flex: "1 1 100px",
-                                        maxWidth: 140,
-                                        fontSize: "2.1rem",
+                                        flex: {
+                                          xs: "1 1 56px",
+                                          sm: "1 1 72px",
+                                          md: "1 1 100px",
+                                        },
+                                        maxWidth: { xs: 88, md: 140 },
                                         fontWeight: 900,
                                         borderColor: `${colors.bg} !important`,
                                         color: selected ? colors.fg : colors.bg,
                                         bgcolor: selected ? colors.bg : "#fff",
                                         boxShadow: selected ? `0 0 0 4px ${colors.bg}55` : "none",
-                                        transform: selected ? "scale(1.06)" : "none",
+                                        transform: selected ? "scale(1.04)" : "none",
                                         "&.Mui-selected": {
                                           bgcolor: `${colors.bg} !important`,
                                           color: `${colors.fg} !important`,

@@ -142,7 +142,14 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
             Showing {competitorRows.length} of{" "}
             {divisions.reduce((n, d) => n + d.competitors.length, 0)}
           </Typography>
-          <Box sx={{ maxHeight: 320, overflow: "auto", border: "1px solid", borderColor: "divider" }}>
+          <Box
+            sx={{
+              maxHeight: { xs: 240, sm: 300, md: 360 },
+              overflow: "auto",
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
@@ -208,7 +215,14 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
             {heatRows.length} of {heats.length} heats
           </Typography>
-          <Box sx={{ maxHeight: 360, overflow: "auto", border: "1px solid", borderColor: "divider" }}>
+          <Box
+            sx={{
+              maxHeight: { xs: 260, sm: 320, md: 400 },
+              overflow: "auto",
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
             <Table size="small" stickyHeader>
               <TableHead>
                 <TableRow>
@@ -277,11 +291,11 @@ export function AdminBrowsePanels({ divisions, heats, sessionName, heatNotes }: 
             {breakdownHeat ? (
               <Box
                 sx={{
-                  maxHeight: 360,
+                  maxHeight: { xs: 260, sm: 320, md: 400 },
                   overflow: "auto",
                   border: "1px solid",
                   borderColor: "divider",
-                  p: 1.5,
+                  p: { xs: 1, md: 1.5 },
                 }}
               >
                 <Typography sx={{ mb: 1.5 }} color="text.secondary">

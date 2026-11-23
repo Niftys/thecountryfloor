@@ -244,15 +244,19 @@ export function ScrutineerBoard({ initial }: Props) {
 
   return (
     <Stack spacing={3}>
-      <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2}>
-        <Box>
-          <Typography variant="h5" component="h2">
+      <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={{ xs: 1.5, md: 2 }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="h5" component="h2" sx={{ wordBreak: "break-word" }}>
             {view.competition.name}
           </Typography>
-          <Typography color="text.secondary" variant="h6" sx={{ fontWeight: 600 }}>
+          <Typography
+            color="text.secondary"
+            variant="h6"
+            sx={{ fontWeight: 600, fontSize: { xs: "1rem", md: "1.25rem" } }}
+          >
             {view.sessionName} · {view.divisionName}
           </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+          <Typography color="text.secondary" sx={{ mt: 0.5, display: { xs: "none", sm: "block" } }}>
             Hover a mark and use the pen to edit.
           </Typography>
         </Box>
@@ -302,7 +306,7 @@ export function ScrutineerBoard({ initial }: Props) {
           </Typography>
           <Box
             sx={{
-              maxHeight: 112,
+              maxHeight: { xs: 96, md: 112 },
               overflow: "auto",
               display: "flex",
               flexWrap: "wrap",
@@ -501,9 +505,9 @@ export function ScrutineerBoard({ initial }: Props) {
                             }}
                             sx={{
                               cursor: cell ? "pointer" : "default",
-                              minWidth: 88,
-                              minHeight: 64,
-                              py: 1.25,
+                              minWidth: { xs: 64, md: 88 },
+                              minHeight: { xs: 52, md: 64 },
+                              py: { xs: 1, md: 1.25 },
                               ...(cell?.overridden
                                 ? { color: "error.main", fontWeight: 800, bgcolor: "#ffebee" }
                                 : cell
