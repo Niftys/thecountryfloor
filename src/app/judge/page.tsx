@@ -69,7 +69,7 @@ export default async function JudgePage({ searchParams }: Props) {
     : activeCompetitions.length === 0
       ? "No active competitions. An admin must mark a competition active."
       : !competition || !session
-        ? "No competition is loaded. Run the Firestore seed."
+        ? "No competition is loaded. Import a CDD file from Admin → Data."
         : !assigned || !scoringJudgeId || !board
           ? session
             ? `You are not assigned to ${session.name}. Choose a different competition or session above.`

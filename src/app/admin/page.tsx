@@ -18,6 +18,7 @@ import {
 } from "@/lib/store/competitions";
 import { listUsers } from "@/lib/store/users";
 import { AdminBrowsePanels } from "./AdminBrowsePanels";
+import { AdminConsole } from "./AdminConsole";
 import { CompetitionActiveToggle } from "./CompetitionActiveToggle";
 import { CompetitionOps } from "./CompetitionOps";
 import { SessionJudgesEditor } from "./SessionJudgesEditor";
@@ -77,126 +78,129 @@ export default async function AdminPage({ searchParams }: Props) {
         },
       ]}
     >
-      <Stack spacing={3}>
-        {competition ? (
-          <Suspense fallback={null}>
-            <ScopePicker
-              competitions={competitions.map((item) => ({
-                id: item.id,
-                label: `${item.name} · ${item.active ? "Active" : "Inactive"}`,
-              }))}
-              sessions={sessions.map((item) => ({ id: item.id, label: item.name }))}
-              competitionId={competition.id}
-              sessionId={session?.id}
-            />
-          </Suspense>
-        ) : null}
-
-        <Card>
-          <CardContent>
-            <Typography variant="h5" gutterBottom>
-              Competition
-            </Typography>
+      <AdminConsole
+        competition={
+          <Stack spacing={3}>
             {competition ? (
-              <Stack spacing={2}>
-                <Typography variant="h6">{competition.name}</Typography>
-                <Typography color="text.secondary">
-                  {[competition.dateLabel, competition.location].filter(Boolean).join(" · ")}
-                </Typography>
-                <CompetitionActiveToggle
-                  key={competition.id}
+              <Suspense fallback={null}>
+                <ScopePicker
+                  competitions={competitions.map((item) => ({
+                    id: item.id,
+                    label: `${item.name} · ${item.active ? "Active" : "Inactive"}`,
+                  }))}
+                  sessions={sessions.map((item) => ({ id: item.id, label: item.name }))}
                   competitionId={competition.id}
-                  active={competition.active}
+                  sessionId={session?.id}
                 />
-                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mb: 1 }}>
-                  <Chip label={`${sessions.length} sessions`} />
-                  <Chip label={`${heats.length} heats in selected session`} />
-                  <Chip label={`${divisions.length} divisions`} />
-                </Stack>
-                <Box
-                  sx={{
-                    maxHeight: 88,
-                    overflow: "auto",
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 1,
-                  }}
-                >
-                  {divisions.map((division) => (
-                    <Chip
-                      key={division.id}
-                      size="small"
-                      label={`${division.name} · ${division.scale}`}
-                      color="primary"
+              </Suspense>
+            ) : null}
+            <Card>
+              <CardContent>
+                <Typography variant="h5" gutterBottom>
+                  Competition
+                </Typography>
+                {competition ? (
+                  <Stack spacing={2}>
+                    <Typography variant="h6">{competition.name}</Typography>
+                    <Typography color="text.secondary">
+                      {[competition.dateLabel, competition.location].filter(Boolean).join(" · ")}
+                    </Typography>
+                    <CompetitionActiveToggle
+                      key={competition.id}
+                      competitionId={competition.id}
+                      active={competition.active}
                     />
-                  ))}
-                </Box>
-              </Stack>
-            ) : (
-              <Typography>No competition loaded. Run the seed.</Typography>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent>
-            <CompetitionOps />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent>
-            <Typography variant="h5" gutterBottom>
-              Users
-            </Typography>
-            <UserManager
-              currentUserId={user.id}
-              users={users.map((row) => ({
-                id: row.id,
-                username: row.username,
-                displayName: row.displayName,
-                role: row.role,
-              }))}
-            />
-          </CardContent>
-        </Card>
-
-        {session ? (
+                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mb: 1 }}>
+                      <Chip label={`${sessions.length} sessions`} />
+                      <Chip label={`${heats.length} heats in selected session`} />
+                      <Chip label={`${divisions.length} divisions`} />
+                    </Stack>
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                      {divisions.map((division) => (
+                        <Chip
+                          key={division.id}
+                          size="small"
+                          label={`${division.name} · ${division.scale}`}
+                          color="primary"
+                        />
+                      ))}
+                    </Box>
+                  </Stack>
+                ) : (
+                  <Typography>
+                    No competition yet. Import a CDD file from the Data tab.
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          </Stack>
+        }
+        people={
           <Card>
             <CardContent>
-              <SessionJudgesEditor
-                key={session.id}
-                competitionId={competition!.id}
-                sessionId={session.id}
-                sessionName={session.name}
-                allJudges={judgeUsers}
-                assignedIds={session.judgeIds}
+              <Typography variant="h5" gutterBottom>
+                Users
+              </Typography>
+              <UserManager
+                currentUserId={user.id}
+                users={users.map((row) => ({
+                  id: row.id,
+                  username: row.username,
+                  displayName: row.displayName,
+                  role: row.role,
+                }))}
               />
             </CardContent>
           </Card>
-        ) : null}
-
-        <AdminBrowsePanels
-          divisions={divisions.map((d) => ({
-            id: d.id,
-            name: d.name,
-            competitors: d.competitors,
-          }))}
-          heats={heats.map((h) => ({
-            id: h.id,
-            number: h.number,
-            styleName: h.styleName,
-            styleAbbrev: h.styleAbbrev,
-            entries: h.entries.map((e) => ({
-              bib: e.bib,
-              name: e.name,
-              divisionName: e.divisionName,
-            })),
-          }))}
-          sessionName={session?.name ?? null}
-          heatNotes={heatNotes}
-        />
-      </Stack>
+        }
+        panel={
+          session && competition ? (
+            <Card>
+              <CardContent>
+                <SessionJudgesEditor
+                  key={session.id}
+                  competitionId={competition.id}
+                  sessionId={session.id}
+                  sessionName={session.name}
+                  allJudges={judgeUsers}
+                  assignedIds={session.judgeIds}
+                />
+              </CardContent>
+            </Card>
+          ) : (
+            <Alert severity="info">Choose a competition and session on the Competition tab.</Alert>
+          )
+        }
+        schedule={
+          <AdminBrowsePanels
+            divisions={divisions.map((d) => ({
+              id: d.id,
+              name: d.name,
+              competitors: d.competitors,
+            }))}
+            heats={heats.map((h) => ({
+              id: h.id,
+              number: h.number,
+              styleName: h.styleName,
+              styleAbbrev: h.styleAbbrev,
+              entries: h.entries.map((e) => ({
+                bib: e.bib,
+                name: e.name,
+                divisionName: e.divisionName,
+              })),
+            }))}
+            sessionName={session?.name ?? null}
+            heatNotes={heatNotes}
+          />
+        }
+        data={
+          <Card>
+            <CardContent>
+              <CompetitionOps />
+            </CardContent>
+          </Card>
+        }
+      />
     </AppShell>
   );
 }

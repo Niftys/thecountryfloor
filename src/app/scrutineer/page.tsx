@@ -99,7 +99,7 @@ export default async function ScrutineerPage({ searchParams }: Props) {
             No active competitions. An admin must mark a competition active.
           </Alert>
         ) : !view ? (
-          <Alert severity="warning">No competition is loaded. Run the Firestore seed.</Alert>
+          <Alert severity="warning">No competition is loaded. Import a CDD file from Admin → Data.</Alert>
         ) : (
           <ScrutineerBoard
             key={`${view.competitionId}-${view.sessionId}-${view.divisionId}`}

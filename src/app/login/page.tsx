@@ -5,21 +5,36 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
+import InputAdornment from "@mui/material/InputAdornment";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useAppearance } from "@/components/ThemePrefs";
 import { getClientAuth } from "@/lib/firebase/client";
 import { authEmailForUsername } from "@/lib/firebase/usernames";
 
+const USERNAME_KEY = "countryfloor.lastUsername";
+
 export default function LoginPage() {
   const router = useRouter();
+  const { appearance, setAppearance } = useAppearance();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(USERNAME_KEY);
+      if (saved) setUsername(saved);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -40,6 +55,11 @@ export default function LoginPage() {
         setError(body?.error ?? "Could not start your session. Try again.");
         setBusy(false);
         return;
+      }
+      try {
+        localStorage.setItem(USERNAME_KEY, username.trim());
+      } catch {
+        /* ignore */
       }
       // Pull freshly written custom claims into the client ID token for live listeners.
       await credential.user.getIdToken(true);
@@ -89,6 +109,13 @@ export default function LoginPage() {
                 Sign in with the username and password your admin gave you.
               </Typography>
             </Box>
+            <Button
+              type="button"
+              variant="outlined"
+              onClick={() => setAppearance(appearance === "floor" ? "ballroom" : "floor")}
+            >
+              {appearance === "floor" ? "Ballroom" : "Floor"}
+            </Button>
             {error ? <Alert severity="error">{error}</Alert> : null}
             <TextField
               label="Username"
@@ -104,12 +131,21 @@ export default function LoginPage() {
             />
             <TextField
               label="Password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
               fullWidth
               required
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Button type="button" onClick={() => setShowPassword((value) => !value)}>
+                      {showPassword ? "Hide" : "Show"}
+                    </Button>
+                  </InputAdornment>
+                ),
+              }}
               inputProps={{
                 style: { fontSize: "1.15rem", paddingTop: 14, paddingBottom: 14 },
               }}

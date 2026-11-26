@@ -10,6 +10,8 @@ import { signOut } from "firebase/auth";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClientAuthGate } from "@/components/ClientAuthGate";
+import { useAppearance } from "@/components/ThemePrefs";
+import { useUnsavedWork } from "@/components/UnsavedWork";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { getClientAuth } from "@/lib/firebase/client";
 
@@ -38,9 +40,19 @@ export function AppShell({
   children,
 }: Props) {
   const router = useRouter();
-  const { denseChrome, isPhone } = useResponsiveLayout();
+  const { denseChrome } = useResponsiveLayout();
+  const { dirty } = useUnsavedWork();
+  const { appearance, setAppearance } = useAppearance();
 
   async function logout() {
+    if (
+      dirty &&
+      !window.confirm(
+        "You have unsubmitted marks on this tablet. Sign out anyway? A refresh or sign-out drops them.",
+      )
+    ) {
+      return;
+    }
     try {
       await signOut(getClientAuth());
     } catch {
@@ -65,7 +77,7 @@ export function AppShell({
         pr: "env(safe-area-inset-right)",
       }}
     >
-      <AppBar position="static" elevation={2} color="primary" sx={{ flexShrink: 0 }}>
+      <AppBar position="static" elevation={2} color="primary" className="no-print" sx={{ flexShrink: 0 }}>
         <Toolbar
           sx={{
             gap: { xs: 0.75, md: scoringFocus ? 1 : 2 },
@@ -134,6 +146,20 @@ export function AppShell({
             ))}
             <Button
               color="inherit"
+              variant="outlined"
+              size="small"
+              onClick={() => setAppearance(appearance === "floor" ? "ballroom" : "floor")}
+              sx={{
+                borderColor: "rgba(255,255,255,0.55)",
+                minHeight: scoringFocus ? 36 : { xs: 40, md: 48 },
+                px: { xs: 1, md: 1.5 },
+                fontSize: { xs: "0.8rem", md: "0.95rem" },
+              }}
+            >
+              {appearance === "floor" ? "Ballroom" : "Floor"}
+            </Button>
+            <Button
+              color="inherit"
               variant="contained"
               size="small"
               onClick={logout}
@@ -145,7 +171,7 @@ export function AppShell({
                 "&:hover": { bgcolor: "rgba(0,0,0,0.4)" },
               }}
             >
-              {isPhone || scoringFocus ? "Out" : "Sign out"}
+              Sign out
             </Button>
           </Stack>
         </Toolbar>

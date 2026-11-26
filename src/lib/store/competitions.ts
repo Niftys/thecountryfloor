@@ -128,9 +128,14 @@ export async function rebuildSessionLive(competitionId: string, sessionId: strin
   const heats = await listHeats(competitionId, sessionId);
   const panel = new Set(session.judgeIds);
   const judgeCount = session.judgeIds.length;
+  const users = await getUsersByIds(session.judgeIds);
   const liveHeats: LiveHeatStatus[] = heats.map((heat) => {
     const style = heat.styleAbbrev || heat.styleName || `H${heat.number}`;
-    const confirmed = heat.confirmedJudgeIds.filter((id) => panel.has(id)).length;
+    const confirmedIds = new Set(heat.confirmedJudgeIds.filter((id) => panel.has(id)));
+    const confirmed = confirmedIds.size;
+    const pendingJudges = session.judgeIds
+      .filter((id) => panel.has(id) && !confirmedIds.has(id))
+      .map((id) => users.get(id)?.displayName ?? id);
     return {
       id: heat.id,
       number: heat.number,
@@ -139,6 +144,7 @@ export async function rebuildSessionLive(competitionId: string, sessionId: strin
       confirmed,
       judges: judgeCount,
       complete: judgeCount > 0 && confirmed >= judgeCount,
+      pendingJudges,
     };
   });
   const live: SessionLiveDoc = {
