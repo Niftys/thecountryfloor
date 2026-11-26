@@ -21,18 +21,15 @@ copy .env.example .env
 
 ### Local with emulators
 
-```bash
-npx firebase emulators:start --only auth,firestore
-```
-
-In another terminal (PowerShell):
+`.env` is set up for emulators by default. Two terminals:
 
 ```powershell
-$env:FIRESTORE_EMULATOR_HOST="127.0.0.1:8080"
-$env:FIREBASE_AUTH_EMULATOR_HOST="127.0.0.1:9099"
-$env:NEXT_PUBLIC_USE_FIREBASE_EMULATORS="true"
-$env:NEXT_PUBLIC_FIREBASE_API_KEY="demo-api-key"
-$env:NEXT_PUBLIC_FIREBASE_PROJECT_ID="thecountryfloor"
+# Terminal 1
+npm run emulators
+```
+
+```powershell
+# Terminal 2 (after emulators are up)
 npm run seed
 npm run dev
 ```

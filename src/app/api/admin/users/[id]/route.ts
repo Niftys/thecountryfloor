@@ -17,6 +17,10 @@ export async function PUT(request: Request, { params }: Params) {
     username?: string;
   };
 
+  if (body.password && body.password.length < 6) {
+    return NextResponse.json({ error: "Password must be at least 6 characters." }, { status: 400 });
+  }
+
   const existing = await getUser(id);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 

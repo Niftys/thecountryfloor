@@ -22,6 +22,7 @@ import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useEffect, useMemo, useState } from "react";
+import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useFirestoreDoc } from "@/hooks/useFirestoreDoc";
 import { medalColor } from "@/lib/medals";
 import type { AlertItem, DanceSheetCell, ScoreChoice, ScrutineerView } from "@/lib/results";
@@ -59,6 +60,7 @@ function PenIcon() {
 }
 
 export function ScrutineerBoard({ initial }: Props) {
+  const { isPhone } = useResponsiveLayout();
   const [view, setView] = useState(initial);
   const [tab, setTab] = useState<"floor" | "places" | "sheets" | "history">("floor");
   const [now, setNow] = useState(() => Date.now());
@@ -303,7 +305,7 @@ export function ScrutineerBoard({ initial }: Props) {
         className="no-print"
         sx={{
           position: "sticky",
-          top: { xs: 56, sm: 64, md: 72 },
+          top: 0,
           zIndex: 8,
           bgcolor: "background.default",
           pb: 1,
@@ -324,6 +326,9 @@ export function ScrutineerBoard({ initial }: Props) {
               sx={{ fontWeight: 600, fontSize: { xs: "1rem", md: "1.25rem" } }}
             >
               {view.sessionName} · {view.divisionName}
+            </Typography>
+            <Typography color="text.secondary" sx={{ mt: 0.5, fontSize: { xs: "0.9rem", md: "1rem" } }}>
+              Tap a mark to edit it. Swipe a sheet sideways to see every column.
             </Typography>
           </Box>
           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
@@ -468,7 +473,7 @@ export function ScrutineerBoard({ initial }: Props) {
               borderColor: "divider",
             }}
           >
-            <Table size="small" stickyHeader>
+            <Table size="small" stickyHeader sx={{ minWidth: 720 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Comp #</TableCell>
@@ -571,7 +576,7 @@ export function ScrutineerBoard({ initial }: Props) {
                 borderColor: "divider",
               }}
             >
-              <Table size="medium" stickyHeader>
+              <Table size="medium" stickyHeader sx={{ minWidth: 980 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell>Comp #</TableCell>
@@ -732,7 +737,7 @@ export function ScrutineerBoard({ initial }: Props) {
               borderColor: "divider",
             }}
           >
-            <Table size="small" stickyHeader>
+            <Table size="small" stickyHeader sx={{ minWidth: 760 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>When</TableCell>
@@ -868,7 +873,13 @@ export function ScrutineerBoard({ initial }: Props) {
         ))}
       </Box>
 
-      <Dialog open={Boolean(edit)} onClose={() => setEdit(null)} fullWidth maxWidth="sm">
+      <Dialog
+        open={Boolean(edit)}
+        onClose={() => setEdit(null)}
+        fullScreen={isPhone}
+        fullWidth
+        maxWidth="sm"
+      >
         <DialogTitle>
           Edit mark
           {edit

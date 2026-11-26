@@ -1,4 +1,4 @@
-import type { DocumentReference } from "firebase-admin/firestore";
+import type { DocumentReference, DocumentSnapshot } from "firebase-admin/firestore";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import {
   auditsCollection,
@@ -25,6 +25,15 @@ import type {
 } from "@/lib/store/types";
 
 export type CompetitionListItem = CompetitionDoc & { id: string };
+
+async function readDocs(refs: DocumentReference[]): Promise<DocumentSnapshot[]> {
+  if (refs.length === 0) return [];
+  const snaps: DocumentSnapshot[] = [];
+  for (let index = 0; index < refs.length; index += 100) {
+    snaps.push(...(await adminDb.getAll(...refs.slice(index, index + 100))));
+  }
+  return snaps;
+}
 
 export async function listCompetitions(options: { activeOnly?: boolean } = {}) {
   const snap = options.activeOnly
@@ -106,12 +115,10 @@ export async function getSessionLive(competitionId: string, sessionId: string) {
 export async function getUsersByIds(ids: string[]) {
   const unique = [...new Set(ids)];
   const users = new Map<string, UserDoc & { id: string }>();
-  await Promise.all(
-    unique.map(async (id) => {
-      const doc = await adminDb.collection("users").doc(id).get();
-      if (doc.exists) users.set(id, { id, ...(doc.data() as UserDoc) });
-    }),
-  );
+  const snaps = await readDocs(unique.map((id) => adminDb.collection("users").doc(id)));
+  for (const doc of snaps) {
+    if (doc.exists) users.set(doc.id, { id: doc.id, ...(doc.data() as UserDoc) });
+  }
   return users;
 }
 
@@ -215,12 +222,13 @@ export async function loadJudgeBoard(
     .filter(Boolean)
     .map((user) => ({ id: user!.id, label: user!.displayName }));
 
-  const sheets = await Promise.all(
-    heats.map((heat) => getJudgeSheet(competitionId, sessionId, heat.id, judgeId)),
+  const sheetSnaps = await readDocs(
+    heats.map((heat) => adminDb.doc(judgeSheetPath(competitionId, sessionId, heat.id, judgeId))),
   );
 
   const boardHeats = heats.map((heat, index) => {
-    const sheet = sheets[index];
+    const snap = sheetSnaps[index];
+    const sheet = snap?.exists ? (snap.data() as JudgeSheetDoc) : null;
     const groups = new Map<string, JudgeHeatBoard["heats"][number]["groups"][number]>();
     for (const entry of heat.entries) {
       const key = `${entry.divisionId}:${entry.danceId}`;
@@ -272,10 +280,15 @@ export async function submitJudgeHeat(input: {
   const heatRef = adminDb.doc(
     heatPath(input.competitionId, input.sessionId, input.heatId),
   );
+  const sessionRef = adminDb.doc(sessionPath(input.competitionId, input.sessionId));
 
   let idempotent = false;
   await adminDb.runTransaction(async (tx) => {
-    const existing = await tx.get(sheetRef);
+    const [existing, heatSnap, sessionSnap] = await Promise.all([
+      tx.get(sheetRef),
+      tx.get(heatRef),
+      tx.get(sessionRef),
+    ]);
     if (
       input.clientRequestId &&
       existing.exists &&
@@ -285,11 +298,10 @@ export async function submitJudgeHeat(input: {
       return;
     }
 
-    const heatSnap = await tx.get(heatRef);
     if (!heatSnap.exists) throw new Error("Heat not found");
+    if (!sessionSnap.exists) throw new Error("Session not found");
     const heatData = heatSnap.data() as HeatDoc;
-    const session = await getSession(input.competitionId, input.sessionId);
-    if (!session) throw new Error("Session not found");
+    const session = sessionSnap.data() as SessionDoc;
     if (!session.judgeIds.includes(input.judgeId)) throw new Error("Judge not on panel");
 
     const prior = existing.exists ? (existing.data() as JudgeSheetDoc) : null;

@@ -1,4 +1,5 @@
 import Alert from "@mui/material/Alert";
+import Stack from "@mui/material/Stack";
 import { Suspense } from "react";
 import { AppShell } from "@/components/AppShell";
 import { ScopePicker } from "@/components/ScopePicker";
@@ -47,8 +48,9 @@ export default async function JudgePage({ searchParams }: Props) {
       ? await loadJudgeBoard(competition.id, session.id, scoringJudgeId)
       : null;
 
+  const pickerCompetitionId = competition?.id ?? activeCompetitions[0]?.id;
   const scopeSlot =
-    activeCompetitions.length > 0 && competition ? (
+    activeCompetitions.length > 0 && pickerCompetitionId ? (
       <Suspense fallback={null}>
         <ScopePicker
           competitions={activeCompetitions.map((item) => ({
@@ -56,11 +58,23 @@ export default async function JudgePage({ searchParams }: Props) {
             label: item.name,
           }))}
           sessions={sessions.map((item) => ({ id: item.id, label: item.name }))}
-          competitionId={competition.id}
+          competitionId={pickerCompetitionId}
           sessionId={session?.id}
         />
       </Suspense>
     ) : null;
+
+  const blockedMessage = inactiveRequested
+    ? `${requested?.name ?? "This competition"} is inactive. Ask an admin to mark it active, or choose an active competition.`
+    : activeCompetitions.length === 0
+      ? "No active competitions. An admin must mark a competition active."
+      : !competition || !session
+        ? "No competition is loaded. Import a CDD file from Admin → Data."
+        : !assigned || !scoringJudgeId || !board
+          ? session
+            ? `You are not assigned to ${session.name}. Choose a different competition or session above.`
+            : "You are not assigned to this session. Choose a different competition or session above."
+          : null;
 
   return (
     <AppShell
@@ -89,18 +103,7 @@ export default async function JudgePage({ searchParams }: Props) {
           : []
       }
     >
-      {inactiveRequested ? (
-        <Alert severity="warning">
-          {requested?.name ?? "This competition"} is inactive. Ask an admin to mark it active, or choose
-          an active competition.
-        </Alert>
-      ) : activeCompetitions.length === 0 ? (
-        <Alert severity="warning">No active competitions. An admin must mark a competition active.</Alert>
-      ) : !competition || !session ? (
-        <Alert severity="warning">No competition is loaded. Import a CDD file from Admin → Data.</Alert>
-      ) : !assigned || !scoringJudgeId || !board ? (
-        <Alert severity="warning">You are not assigned to this session.</Alert>
-      ) : (
+      {board && competition && session && scoringJudgeId ? (
         <JudgeBoard
           key={`${competition.id}-${session.id}-${scoringJudgeId}`}
           competitionId={competition.id}
@@ -112,6 +115,11 @@ export default async function JudgePage({ searchParams }: Props) {
           panelJudges={user.role === "ADMIN" ? board.panel : []}
           scopeSlot={scopeSlot}
         />
+      ) : (
+        <Stack spacing={2}>
+          {scopeSlot}
+          {blockedMessage ? <Alert severity="warning">{blockedMessage}</Alert> : null}
+        </Stack>
       )}
     </AppShell>
   );

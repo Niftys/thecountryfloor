@@ -90,6 +90,8 @@ export default function LoginPage() {
         display: "grid",
         placeItems: "center",
         p: { xs: 2, sm: 3 },
+        pt: "max(16px, env(safe-area-inset-top))",
+        pb: "max(16px, env(safe-area-inset-bottom))",
         bgcolor: "background.default",
       }}
     >

@@ -1,6 +1,7 @@
 "use client";
 
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
@@ -33,7 +34,7 @@ type Props = {
 const emptyForm = {
   username: "",
   displayName: "",
-  password: "demo12",
+  password: "",
   role: "JUDGE",
 };
 
@@ -143,6 +144,7 @@ export function UserManager({ users, currentUserId }: Props) {
           value={createForm.username}
           onChange={(event) => setCreateForm((form) => ({ ...form, username: event.target.value }))}
           required
+          autoComplete="off"
           sx={{ minWidth: 160 }}
         />
         <TextField
@@ -158,7 +160,9 @@ export function UserManager({ users, currentUserId }: Props) {
           value={createForm.password}
           onChange={(event) => setCreateForm((form) => ({ ...form, password: event.target.value }))}
           required
-          sx={{ minWidth: 140 }}
+          autoComplete="new-password"
+          helperText="At least 6 characters"
+          sx={{ minWidth: 180 }}
         />
         <TextField
           select
@@ -186,7 +190,8 @@ export function UserManager({ users, currentUserId }: Props) {
         fullWidth
       />
 
-      <Table size="small">
+      <Box sx={{ overflow: "auto", border: "1px solid", borderColor: "divider" }}>
+      <Table size="small" sx={{ minWidth: 640 }}>
         <TableHead>
           <TableRow>
             <TableCell>Username</TableCell>
@@ -239,6 +244,7 @@ export function UserManager({ users, currentUserId }: Props) {
           ))}
         </TableBody>
       </Table>
+      </Box>
 
       <Dialog open={Boolean(editUser)} onClose={() => setEditUser(null)} fullWidth maxWidth="sm">
         <DialogTitle>Edit user</DialogTitle>
@@ -275,7 +281,8 @@ export function UserManager({ users, currentUserId }: Props) {
               value={editForm.password}
               onChange={(event) => setEditForm((form) => ({ ...form, password: event.target.value }))}
               fullWidth
-              helperText="Leave blank to keep the current password"
+              autoComplete="new-password"
+              helperText="Leave blank to keep the current password. New passwords need 6 characters."
             />
           </Stack>
         </DialogContent>
