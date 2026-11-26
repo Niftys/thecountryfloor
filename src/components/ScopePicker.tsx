@@ -6,6 +6,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Select from "@mui/material/Select";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useNavProgress } from "@/components/NavProgress";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 
 export type ScopeOption = { id: string; label: string };
@@ -33,6 +34,7 @@ export function ScopePicker({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { isPhone } = useResponsiveLayout();
+  const startNav = useNavProgress();
 
   function go(patch: Record<string, string | undefined>) {
     const next = new URLSearchParams(searchParams.toString());
@@ -41,11 +43,19 @@ export function ScopePicker({
       else next.set(key, value);
     }
     const query = next.toString();
-    router.push(query ? `${pathname}?${query}` : pathname);
+    const href = query ? `${pathname}?${query}` : pathname;
+    if (href === `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`) return;
+    startNav();
+    router.push(href);
   }
 
   return (
-    <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 1.25, md: 2 }} sx={{ mb: 0 }}>
+    <Stack
+      className="no-print"
+      direction={{ xs: "column", md: "row" }}
+      spacing={{ xs: 1.25, md: 2 }}
+      sx={{ mb: 0 }}
+    >
       <FormControl sx={{ minWidth: { xs: "100%", sm: 200, md: 280 }, flex: 1 }} size={isPhone ? "small" : "medium"}>
         <InputLabel id="competition-select">Competition</InputLabel>
         <Select

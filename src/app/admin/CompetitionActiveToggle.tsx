@@ -3,6 +3,7 @@
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -42,6 +43,9 @@ export function CompetitionActiveToggle({ competitionId, active }: Props) {
       <Button variant="contained" color={active ? "inherit" : "success"} disabled={busy} onClick={toggle}>
         Mark {active ? "inactive" : "active"}
       </Button>
+      <Typography variant="body2" color="text.secondary">
+        Inactive competitions stay in admin and are hidden from judge and scrutineer tablets.
+      </Typography>
       {error ? <Chip label={error} color="error" /> : null}
     </Stack>
   );

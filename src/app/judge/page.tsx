@@ -97,7 +97,7 @@ export default async function JudgePage({ searchParams }: Props) {
       ) : activeCompetitions.length === 0 ? (
         <Alert severity="warning">No active competitions. An admin must mark a competition active.</Alert>
       ) : !competition || !session ? (
-        <Alert severity="warning">No competition is loaded. Run the Firestore seed.</Alert>
+        <Alert severity="warning">No competition is loaded. Import a CDD file from Admin → Data.</Alert>
       ) : !assigned || !scoringJudgeId || !board ? (
         <Alert severity="warning">You are not assigned to this session.</Alert>
       ) : (

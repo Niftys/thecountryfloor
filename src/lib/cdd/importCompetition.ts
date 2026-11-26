@@ -22,7 +22,7 @@ function styleName(abbrev: string) {
  * Import structure from CDD exchange JSON.
  * Never deletes or overwrites existing judgeSheets.
  */
-export async function importCddCompetition(raw: unknown) {
+export async function importCddCompetition(raw: unknown, options?: { preview?: boolean }) {
   const parsed = parseCddPayload(raw);
   if (!parsed.ok) return parsed;
 
@@ -41,6 +41,36 @@ export async function importCddCompetition(raw: unknown) {
         .get();
 
   const competitionId = existingSnap.empty ? adminDb.collection("competitions").doc().id : existingSnap.docs[0]!.id;
+
+  if (options?.preview) {
+    const notes = [...heatingNotes];
+    for (const sess of data.sessions) {
+      const missingJudges: string[] = [];
+      for (const username of sess.judgeUsernames ?? []) {
+        const user = await findUserByUsername(username);
+        if (!user) missingJudges.push(username);
+      }
+      if (missingJudges.length > 0) {
+        notes.push(
+          `Session ${sess.name}: unknown judge usernames skipped (${missingJudges.join(", ")}).`,
+        );
+      }
+    }
+    return {
+      ok: true as const,
+      preview: true as const,
+      competitionName: data.competition.name,
+      existing: !existingSnap.empty,
+      divisions: data.divisions.map((division) => division.name),
+      sessions: data.sessions.map((session) => ({
+        name: session.name,
+        heats: session.heats?.length ?? 0,
+      })),
+      heatCount: data.sessions.reduce((total, session) => total + (session.heats?.length ?? 0), 0),
+      heatingWarnings: notes,
+    };
+  }
+
   const competition: CompetitionDoc = {
     name: data.competition.name,
     dateLabel: data.competition.dateLabel ?? "",

@@ -12,16 +12,19 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
+import Tab from "@mui/material/Tab";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useEffect, useMemo, useState } from "react";
 import { useFirestoreDoc } from "@/hooks/useFirestoreDoc";
-import type { DanceSheetCell, ScoreChoice, ScrutineerView } from "@/lib/results";
+import { medalColor } from "@/lib/medals";
+import type { AlertItem, DanceSheetCell, ScoreChoice, ScrutineerView } from "@/lib/results";
 import { COUPLES_SCALE, PROAM_SCALE, formatDancePlace, requiresPlacement } from "@/lib/scoring";
 import { divisionResultsPath, sessionLivePath } from "@/lib/store/paths";
 import type { SessionLiveDoc } from "@/lib/store/types";
@@ -42,7 +45,7 @@ function PenIcon() {
       sx={{
         display: "inline-flex",
         ml: 0.5,
-        opacity: 0,
+        opacity: 0.85,
         verticalAlign: "middle",
         transition: "opacity 0.15s ease",
         color: "primary.main",
@@ -57,6 +60,8 @@ function PenIcon() {
 
 export function ScrutineerBoard({ initial }: Props) {
   const [view, setView] = useState(initial);
+  const [tab, setTab] = useState<"floor" | "places" | "sheets" | "history">("floor");
+  const [now, setNow] = useState(() => Date.now());
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const [medal, setMedal] = useState("");
   const [placement, setPlacement] = useState("");
@@ -65,7 +70,6 @@ export function ScrutineerBoard({ initial }: Props) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [liveLabel, setLiveLabel] = useState("Live");
   const [danceFilter, setDanceFilter] = useState(initial.dances[0]?.abbrev ?? "");
   const [auditQuery, setAuditQuery] = useState("");
 
@@ -86,11 +90,20 @@ export function ScrutineerBoard({ initial }: Props) {
   }, [initial]);
 
   useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 5000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
     if (!liveDoc?.heats) return;
-    setLiveLabel("Live");
     setView((current) => ({
       ...current,
-      heats: liveDoc.heats,
+      heats: liveDoc.heats.map((heat) => ({
+        ...heat,
+        pendingJudges:
+          heat.pendingJudges ??
+          current.heats.find((item) => item.id === heat.id)?.pendingJudges,
+      })),
       sessionComplete:
         liveDoc.heats.length > 0 && liveDoc.heats.every((heat) => heat.complete),
       provisional:
@@ -100,7 +113,6 @@ export function ScrutineerBoard({ initial }: Props) {
 
   useEffect(() => {
     if (!resultsDoc?.view) return;
-    setLiveLabel("Live");
     setView((current) => ({
       ...resultsDoc.view!,
       heats: current.heats,
@@ -137,6 +149,21 @@ export function ScrutineerBoard({ initial }: Props) {
     setScratched(cell.scratched);
     setMessage("");
     setError("");
+  }
+
+  function openAlert(alert: AlertItem) {
+    if (alert.dance) setDanceFilter(alert.dance);
+    setTab("sheets");
+    if (!alert.scoreId) return;
+    for (const dance of view.dances) {
+      if (alert.dance && dance.abbrev !== alert.dance) continue;
+      for (const row of dance.rows) {
+        const cell = row.cells.find((item) => item.scoreId === alert.scoreId);
+        if (!cell) continue;
+        openCell(cell.scoreId, dance.abbrev, cell);
+        return;
+      }
+    }
   }
 
   async function saveScore() {
@@ -227,6 +254,10 @@ export function ScrutineerBoard({ initial }: Props) {
   const medals = edit?.score.scale === "PROAM" ? PROAM_SCALE : COUPLES_SCALE;
   const listenerError = liveError || resultsError;
   const activeDance = view.dances.find((d) => d.abbrev === danceFilter) ?? view.dances[0] ?? null;
+  const editPlaceCount = Math.max(
+    view.dances.find((dance) => dance.abbrev === edit?.danceAbbrev)?.rows.length ?? 1,
+    1,
+  );
 
   const filteredAudits = useMemo(() => {
     const q = auditQuery.trim().toLowerCase();
@@ -242,117 +273,186 @@ export function ScrutineerBoard({ initial }: Props) {
     );
   }, [auditQuery, view.audits]);
 
+  const liveAgeSec = liveDoc?.updatedAt
+    ? Math.max(0, Math.round((now - Date.parse(liveDoc.updatedAt)) / 1000))
+    : null;
+  const liveStatus = listenerError
+    ? "Offline"
+    : liveAgeSec == null
+      ? "Connecting…"
+      : `Live · updated ${liveAgeSec}s ago`;
+
+  const owedByJudge = new Map<string, number[]>();
+  const owedUnknown: { number: number; confirmed: number; judges: number }[] = [];
+  for (const heat of view.heats) {
+    if (heat.complete) continue;
+    if (!heat.pendingJudges || heat.pendingJudges.length === 0) {
+      owedUnknown.push({ number: heat.number, confirmed: heat.confirmed, judges: heat.judges });
+      continue;
+    }
+    for (const name of heat.pendingJudges) {
+      const list = owedByJudge.get(name) ?? [];
+      list.push(heat.number);
+      owedByJudge.set(name, list);
+    }
+  }
+
   return (
     <Stack spacing={3}>
-      <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={{ xs: 1.5, md: 2 }}>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h5" component="h2" sx={{ wordBreak: "break-word" }}>
-            {view.competition.name}
-          </Typography>
-          <Typography
-            color="text.secondary"
-            variant="h6"
-            sx={{ fontWeight: 600, fontSize: { xs: "1rem", md: "1.25rem" } }}
-          >
-            {view.sessionName} · {view.divisionName}
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5, display: { xs: "none", sm: "block" } }}>
-            Hover a mark and use the pen to edit.
-          </Typography>
-        </Box>
-        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
-          <Chip
-            label={liveLabel === "Live" ? "Updating live" : liveLabel}
-            color="success"
-            variant="outlined"
-          />
-          <Chip
-            label={view.provisional ? "Not final yet" : "Panel complete"}
-            color={view.provisional ? "warning" : "success"}
-          />
-          <Chip
-            label={view.sessionComplete ? "All heats done" : "Heats still open"}
-            color={view.sessionComplete ? "success" : "default"}
-          />
-          <Button variant="outlined" onClick={downloadPacket}>
-            Download results file
-          </Button>
+      <Box
+        className="no-print"
+        sx={{
+          position: "sticky",
+          top: { xs: 56, sm: 64, md: 72 },
+          zIndex: 8,
+          bgcolor: "background.default",
+          pb: 1,
+        }}
+      >
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          justifyContent="space-between"
+          spacing={{ xs: 1.5, md: 2 }}
+        >
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h5" component="h2" sx={{ wordBreak: "break-word" }}>
+              {view.competition.name}
+            </Typography>
+            <Typography
+              color="text.secondary"
+              variant="h6"
+              sx={{ fontWeight: 600, fontSize: { xs: "1rem", md: "1.25rem" } }}
+            >
+              {view.sessionName} · {view.divisionName}
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
+            <Chip
+              label={liveStatus}
+              color={listenerError ? "error" : "success"}
+              variant="outlined"
+            />
+            <Chip
+              label={view.provisional ? "Not final yet" : "Panel complete"}
+              color={view.provisional ? "warning" : "success"}
+            />
+            <Chip
+              label={view.sessionComplete ? "All heats done" : "Heats still open"}
+              color={view.sessionComplete ? "success" : "default"}
+            />
+            <Button variant="outlined" onClick={downloadPacket}>
+              Download results file
+            </Button>
+            <Button variant="contained" onClick={() => window.print()}>
+              Print results
+            </Button>
+          </Stack>
         </Stack>
-      </Stack>
+        <Tabs
+          value={tab}
+          onChange={(_, value: "floor" | "places" | "sheets" | "history") => setTab(value)}
+          variant="scrollable"
+          sx={{ mt: 1 }}
+        >
+          <Tab value="floor" label="Floor" />
+          <Tab value="places" label="Places" />
+          <Tab value="sheets" label="Sheets" />
+          <Tab value="history" label="History" />
+        </Tabs>
+      </Box>
 
       {listenerError ? (
-        <Alert severity="error">
+        <Alert severity="error" className="no-print">
           Live updates are blocked: {listenerError}. Sign out and sign back in. If it continues,
           ask an admin to check Firebase authorized domains.
         </Alert>
       ) : null}
-      {message ? <Alert severity="success">{message}</Alert> : null}
-      {error && !edit ? <Alert severity="error">{error}</Alert> : null}
-
-      {view.provisional ? (
-        <Alert severity="warning">
-          Rankings below may still change until every judge has submitted every heat for this
-          division.
+      {message ? (
+        <Alert severity="success" className="no-print">
+          {message}
+        </Alert>
+      ) : null}
+      {error && !edit ? (
+        <Alert severity="error" className="no-print">
+          {error}
         </Alert>
       ) : null}
 
-      <Card>
-        <CardContent>
-          <Typography variant="h5" gutterBottom>
-            Judge progress
-          </Typography>
-          <Typography color="text.secondary" sx={{ mb: 1.5 }}>
-            Green = submitted · Orange = waiting · Scroll for more
-          </Typography>
-          <Box
-            sx={{
-              maxHeight: { xs: 96, md: 112 },
-              overflow: "auto",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 1,
-              pr: 0.5,
-            }}
-          >
-            {view.heats.map((heat) => {
-              const style = heat.label.includes(" · ")
-                ? heat.label.slice(0, heat.label.indexOf(" · "))
-                : heat.label;
-              return (
-                <Chip
-                  key={heat.id}
-                  label={`H${heat.number} · ${style} · ${heat.confirmed}/${heat.judges}`}
-                  color={heat.complete ? "success" : "warning"}
-                  sx={{ fontSize: "0.95rem", height: 40 }}
-                />
-              );
-            })}
-          </Box>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent>
-          <Typography variant="h5" gutterBottom>
-            Things to check
-          </Typography>
-          {view.alerts.length === 0 ? (
-            <Alert severity="success">Nothing unusual right now.</Alert>
-          ) : (
-            <Box sx={{ maxHeight: 200, overflow: "auto" }}>
-              <Stack spacing={1}>
-                {view.alerts.map((alert) => (
-                  <Alert key={alert.id} severity="warning">
-                    {alert.text}
-                  </Alert>
+      {tab === "floor" ? (
+        <Stack spacing={3} className="no-print">
+          {view.provisional ? (
+            <Alert severity="warning">
+              Rankings may still change until every judge has submitted every heat for this division.
+            </Alert>
+          ) : null}
+          <Card>
+            <CardContent>
+              <Typography variant="h5" gutterBottom>
+                Still waiting
+              </Typography>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.4, mb: 2 }} aria-hidden>
+                {view.heats.map((heat) => (
+                  <Box
+                    key={heat.id}
+                    title={`Heat ${heat.number}${heat.complete ? " complete" : " waiting"}`}
+                    sx={{
+                      width: 12,
+                      height: 8,
+                      borderRadius: 0.5,
+                      bgcolor: heat.complete ? "success.main" : "warning.main",
+                    }}
+                  />
                 ))}
-              </Stack>
-            </Box>
-          )}
-        </CardContent>
-      </Card>
+              </Box>
+              {owedByJudge.size === 0 && owedUnknown.length === 0 ? (
+                <Alert severity="success">Every judge has submitted every heat in this session.</Alert>
+              ) : (
+                <Stack spacing={1}>
+                  {[...owedByJudge.entries()].map(([name, numbers]) => (
+                    <Typography key={name} sx={{ fontWeight: 700 }}>
+                      {name} owes {numbers.join(", ")}
+                    </Typography>
+                  ))}
+                  {owedUnknown.length > 0 ? (
+                    <Typography color="text.secondary">
+                      Waiting without a judge name:{" "}
+                      {owedUnknown
+                        .map((heat) => `H${heat.number} (${heat.confirmed}/${heat.judges})`)
+                        .join(", ")}
+                    </Typography>
+                  ) : null}
+                </Stack>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent>
+              <Typography variant="h5" gutterBottom>
+                Things to check
+              </Typography>
+              {view.alerts.length === 0 ? (
+                <Alert severity="success">Nothing unusual right now.</Alert>
+              ) : (
+                <Stack spacing={1}>
+                  {view.alerts.map((alert) => (
+                    <Alert
+                      key={alert.id}
+                      severity="warning"
+                      onClick={() => openAlert(alert)}
+                      sx={{ cursor: alert.dance || alert.scoreId ? "pointer" : "default" }}
+                    >
+                      {alert.text}
+                    </Alert>
+                  ))}
+                </Stack>
+              )}
+            </CardContent>
+          </Card>
+        </Stack>
+      ) : null}
 
-      <Card>
+      {tab === "places" ? (
+        <Card className="no-print">
         <CardContent>
           <Typography variant="h5" gutterBottom>
             {view.divisionName} — overall places
@@ -378,9 +478,9 @@ export function ScrutineerBoard({ initial }: Props) {
                       {place.abbrev}
                     </TableCell>
                   ))}
-                  <TableCell align="right">Rule 9</TableCell>
-                  <TableCell align="right">Rule 10</TableCell>
-                  <TableCell align="right">Rule 11</TableCell>
+                  <TableCell align="right">Dance total (Rule 9)</TableCell>
+                  <TableCell align="right">Head-to-head (Rule 10)</TableCell>
+                  <TableCell align="right">All marks (Rule 11)</TableCell>
                   <TableCell align="right">Place</TableCell>
                 </TableRow>
               </TableHead>
@@ -430,9 +530,11 @@ export function ScrutineerBoard({ initial }: Props) {
             </Table>
           </Box>
         </CardContent>
-      </Card>
+        </Card>
+      ) : null}
 
-      <Card>
+      {tab === "sheets" ? (
+      <Card className="no-print">
         <CardContent>
           <Stack
             direction={{ xs: "column", sm: "row" }}
@@ -442,7 +544,7 @@ export function ScrutineerBoard({ initial }: Props) {
           >
             <Box>
               <Typography variant="h5">Dance sheets</Typography>
-              <Typography color="text.secondary">Click a mark to edit.</Typography>
+              <Typography color="text.secondary">Tap a mark to edit.</Typography>
             </Box>
             <TextField
               select
@@ -507,21 +609,27 @@ export function ScrutineerBoard({ initial }: Props) {
                               cursor: cell ? "pointer" : "default",
                               minWidth: { xs: 72, md: 96 },
                               width: { xs: 72, md: 96 },
+                              minHeight: 52,
                               verticalAlign: "middle",
                               py: { xs: 0.75, md: 1 },
                               px: 0.75,
+                              outline: "1px solid",
+                              outlineColor: cell?.overridden
+                                ? "error.main"
+                                : cell?.medal
+                                  ? medalColor(cell.medal).bg
+                                  : "divider",
                               ...(cell?.overridden
                                 ? { color: "error.main", fontWeight: 800, bgcolor: "#ffebee" }
-                                : cell
+                                : cell?.medal && !cell.scratched
                                   ? {
-                                      bgcolor: "#f7fafc",
-                                      "&:hover": {
-                                        bgcolor: "#e3f2fd",
-                                        outline: "2px solid #1565c0",
-                                        "& .cell-pen": { opacity: 1 },
-                                      },
+                                      color: medalColor(cell.medal).bg,
+                                      fontWeight: 800,
+                                      bgcolor: `${medalColor(cell.medal).bg}22`,
                                     }
-                                  : undefined),
+                                  : cell
+                                    ? { bgcolor: "action.hover" }
+                                    : undefined),
                             }}
                           >
                             {cell ? (
@@ -591,8 +699,10 @@ export function ScrutineerBoard({ initial }: Props) {
           )}
         </CardContent>
       </Card>
+      ) : null}
 
-      <Card>
+      {tab === "history" ? (
+      <Card className="no-print">
         <CardContent>
           <Stack
             direction={{ xs: "column", sm: "row" }}
@@ -656,6 +766,107 @@ export function ScrutineerBoard({ initial }: Props) {
           </Box>
         </CardContent>
       </Card>
+      ) : null}
+
+      <Box className="print-pack">
+        <Typography variant="h4">{view.competition.name}</Typography>
+        <Typography variant="h6" gutterBottom>
+          {view.sessionName} · {view.divisionName}
+        </Typography>
+        <Typography variant="h5" sx={{ mt: 2, mb: 1 }}>
+          Overall places
+        </Typography>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Comp #</TableCell>
+              <TableCell>Entry</TableCell>
+              {view.summary[0]?.places.map((place) => (
+                <TableCell key={place.abbrev} align="right">
+                  {place.abbrev}
+                </TableCell>
+              ))}
+              <TableCell align="right">Dance total (Rule 9)</TableCell>
+              <TableCell align="right">Head-to-head (Rule 10)</TableCell>
+              <TableCell align="right">All marks (Rule 11)</TableCell>
+              <TableCell align="right">Place</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {view.summary.map((row) => (
+              <TableRow key={`print-${row.bib}`}>
+                <TableCell>{row.bib}</TableCell>
+                <TableCell>{row.name}</TableCell>
+                {row.places.map((place) => (
+                  <TableCell
+                    key={place.abbrev}
+                    align="right"
+                    sx={place.overridden ? { color: "error.main", fontWeight: 800, bgcolor: "#ffebee" } : undefined}
+                  >
+                    {formatDancePlace(place.place)}
+                  </TableCell>
+                ))}
+                <TableCell align="right">{row.rule9Total.toFixed(1)}</TableCell>
+                <TableCell align="right">{row.rule10Place}</TableCell>
+                <TableCell align="right">{row.rule11Place}</TableCell>
+                <TableCell align="right">{row.place}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+        {view.dances.map((dance) => (
+          <Box key={`print-${dance.abbrev}`} sx={{ mt: 3, breakBefore: "page" }}>
+            <Typography variant="h5" gutterBottom>
+              {dance.name}
+            </Typography>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Comp #</TableCell>
+                  <TableCell>Couple</TableCell>
+                  {dance.judges.map((judge) => (
+                    <TableCell key={judge} align="center">
+                      {judge}
+                    </TableCell>
+                  ))}
+                  <TableCell>Medal</TableCell>
+                  <TableCell>Place</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {dance.rows.map((row) => (
+                  <TableRow key={`${dance.abbrev}-${row.bib}`}>
+                    <TableCell>{row.bib}</TableCell>
+                    <TableCell>{row.name}</TableCell>
+                    {dance.judges.map((judge) => {
+                      const cell = row.cells.find((item) => item.judge === judge);
+                      return (
+                        <TableCell
+                          key={judge}
+                          align="center"
+                          sx={
+                            cell?.overridden
+                              ? { color: "error.main", fontWeight: 800, bgcolor: "#ffebee" }
+                              : undefined
+                          }
+                        >
+                          {cell
+                            ? cell.scratched
+                              ? "SCR"
+                              : `${cell.medal || "—"}${cell.placement != null ? ` #${cell.placement}` : ""}`
+                            : "—"}
+                        </TableCell>
+                      );
+                    })}
+                    <TableCell>{row.medal}</TableCell>
+                    <TableCell>{formatDancePlace(row.place)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        ))}
+      </Box>
 
       <Dialog open={Boolean(edit)} onClose={() => setEdit(null)} fullWidth maxWidth="sm">
         <DialogTitle>
@@ -693,13 +904,22 @@ export function ScrutineerBoard({ initial }: Props) {
             </TextField>
             {edit && requiresPlacement(edit.score.scale) ? (
               <TextField
+                select
                 label="Place"
-                type="number"
                 value={placement}
                 onChange={(event) => setPlacement(event.target.value)}
                 disabled={scratched}
                 fullWidth
-              />
+              >
+                <MenuItem value="">
+                  <em>Pick</em>
+                </MenuItem>
+                {Array.from({ length: editPlaceCount }, (_, index) => index + 1).map((place) => (
+                  <MenuItem key={place} value={String(place)}>
+                    {place}
+                  </MenuItem>
+                ))}
+              </TextField>
             ) : null}
             <TextField
               label="Notes"

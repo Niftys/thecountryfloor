@@ -39,9 +39,18 @@ export type HeatStatus = {
   confirmed: number;
   judges: number;
   complete: boolean;
+  /** Display names still owed. Missing on older live docs. */
+  pendingJudges?: string[];
 };
 
-export type AlertItem = { id: string; text: string };
+export type AlertItem = {
+  id: string;
+  text: string;
+  /** Dance abbrev, used to open the sheet. */
+  dance?: string;
+  bib?: number;
+  scoreId?: string;
+};
 
 export type SummaryRow = {
   bib: number;
@@ -178,7 +187,16 @@ export async function buildAndCacheScrutineerView(input: {
   const judgeNames = judgeIds.map((id) => users.get(id)!.displayName);
   const scale = division.scale;
 
-  const heatStatuses: HeatStatus[] =
+  const heatById = new Map(heats.map((heat) => [heat.id, heat]));
+  function pendingNames(heatId: string): string[] | undefined {
+    const heat = heatById.get(heatId);
+    if (!heat) return undefined;
+    return judgeIds
+      .filter((id) => !heat.confirmedJudgeIds.includes(id))
+      .map((id) => users.get(id)?.displayName ?? id);
+  }
+
+  const heatStatuses: HeatStatus[] = (
     live?.heats ??
     heats.map((heat) => ({
       id: heat.id,
@@ -187,7 +205,11 @@ export async function buildAndCacheScrutineerView(input: {
       confirmed: heat.confirmCount,
       judges: judgeIds.length,
       complete: judgeIds.length > 0 && heat.confirmCount >= judgeIds.length,
-    }));
+      pendingJudges: pendingNames(heat.id),
+    }))
+  ).map((status) =>
+    status.pendingJudges ? status : { ...status, pendingJudges: pendingNames(status.id) },
+  );
 
   const sheetsByHeat = await Promise.all(
     heats.map(async (heat) => ({
@@ -254,6 +276,8 @@ export async function buildAndCacheScrutineerView(input: {
           alerts.push({
             id: `scratch-${entryMarks.entry.id}`,
             text: `Bib ${entryMarks.entry.bib} scratch does not match across judges in ${entryMarks.entry.danceName}.`,
+            dance: entryMarks.entry.danceAbbrev,
+            bib: entryMarks.entry.bib,
           });
         }
         const points = marks.active.map((score) => medalPoints(score.medal, scale));
@@ -265,6 +289,9 @@ export async function buildAndCacheScrutineerView(input: {
             alerts.push({
               id: `low-${score.judgeId}-${entryMarks.entry.id}`,
               text: `${score.judgeName} marked ${score.medal} on bib ${entryMarks.entry.bib} in ${entryMarks.entry.danceName}, ${Math.round(gap)} steps below the others.`,
+              dance: entryMarks.entry.danceAbbrev,
+              bib: entryMarks.entry.bib,
+              scoreId: scoreKey(heat.id, entryMarks.entry.id, score.judgeId),
             });
           }
         });

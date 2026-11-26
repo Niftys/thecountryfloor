@@ -115,6 +115,8 @@ export type LiveHeatStatus = {
   confirmed: number;
   judges: number;
   complete: boolean;
+  /** Display names of panel judges who have not confirmed this heat. */
+  pendingJudges?: string[];
 };
 
 export type SessionLiveDoc = {

@@ -15,7 +15,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const result = await importCddCompetition(raw);
+  const preview = new URL(request.url).searchParams.get("preview") === "1";
+  const result = await importCddCompetition(raw, { preview });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
   return NextResponse.json(result);
 }

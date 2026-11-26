@@ -7,12 +7,19 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Countryfloor",
   description: "ACDA country dance judging for tablets",
+  applicationName: "Countryfloor",
+  appleWebApp: {
+    capable: true,
+    title: "Countryfloor",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#0d47a1",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

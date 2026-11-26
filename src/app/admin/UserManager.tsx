@@ -46,6 +46,12 @@ export function UserManager({ users, currentUserId }: Props) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
+  const visibleUsers = users.filter((row) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return row.username.toLowerCase().includes(q) || row.displayName.toLowerCase().includes(q);
+  });
 
   function showResult(ok: boolean, text: string) {
     setMessage(ok ? text : "");
@@ -173,6 +179,13 @@ export function UserManager({ users, currentUserId }: Props) {
       {message ? <Alert severity="success">{message}</Alert> : null}
       {error ? <Alert severity="error">{error}</Alert> : null}
 
+      <TextField
+        label="Search name or username"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        fullWidth
+      />
+
       <Table size="small">
         <TableHead>
           <TableRow>
@@ -183,7 +196,7 @@ export function UserManager({ users, currentUserId }: Props) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {users.map((row) => (
+          {visibleUsers.map((row) => (
             <TableRow key={row.id}>
               <TableCell>{row.username}</TableCell>
               <TableCell>{row.displayName}</TableCell>

@@ -16,8 +16,10 @@ import DialogTitle from "@mui/material/DialogTitle";
 import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import InputLabel from "@mui/material/InputLabel";
+import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
+import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
@@ -27,6 +29,7 @@ import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useUnsavedWork } from "@/components/UnsavedWork";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import {
   enqueueOfflineSubmit,
@@ -34,6 +37,7 @@ import {
   loadOfflineQueue,
   newClientRequestId,
 } from "@/lib/offlineQueue";
+import { medalColor } from "@/lib/medals";
 import {
   COUPLES_SCALE,
   PROAM_SCALE,
@@ -42,18 +46,6 @@ import {
   requiresPlacement,
   type Scale,
 } from "@/lib/scoring";
-
-const MEDAL_COLORS: Record<string, { bg: string; fg: string }> = {
-  M: { bg: "#546e7a", fg: "#fff" },
-  B: { bg: "#6d4c41", fg: "#fff" },
-  S: { bg: "#78909c", fg: "#fff" },
-  "S+": { bg: "#607d8b", fg: "#fff" },
-  G: { bg: "#2e7d32", fg: "#fff" },
-  "G+": { bg: "#1b5e20", fg: "#fff" },
-  H: { bg: "#1565c0", fg: "#fff" },
-  "H+": { bg: "#0d47a1", fg: "#fff" },
-  GG: { bg: "#e65100", fg: "#fff" },
-};
 
 type EntryState = {
   heatEntryId: string;
@@ -139,8 +131,48 @@ function BibBox({ bib }: { bib: number }) {
   );
 }
 
+function CoupleName({ name, compact = false }: { name: string; compact?: boolean }) {
+  const partners = name.split(/\s+&\s+/);
+  return (
+    <Box sx={{ minWidth: 0, flex: 1 }}>
+      {partners.map((partner, index) => {
+        const words = partner.trim().split(/\s+/).filter(Boolean);
+        const last = words.pop() ?? partner;
+        const rest = words.join(" ");
+        return (
+          <Typography
+            key={`${partner}-${index}`}
+            sx={{
+              fontWeight: 700,
+              lineHeight: 1.15,
+              fontSize: compact
+                ? { xs: "0.85rem", sm: "0.95rem" }
+                : { xs: "1.05rem", md: "1.2rem" },
+            }}
+          >
+            {rest ? `${rest} ` : null}
+            <Box component="span" sx={{ fontWeight: 900 }}>
+              {last}
+            </Box>
+          </Typography>
+        );
+      })}
+    </Box>
+  );
+}
+
+function pulseSubmit() {
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate(20);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 function MedalBadge({ medal }: { medal: string }) {
-  const colors = MEDAL_COLORS[medal] ?? { bg: "#212121", fg: "#fff" };
+  const colors = medalColor(medal);
   return (
     <Box
       sx={{
@@ -200,6 +232,7 @@ export function JudgeBoard({
   scopeSlot,
 }: Props) {
   const router = useRouter();
+  const { setDirty: setUnsaved } = useUnsavedWork();
   const { judgeChromePx, isPhone } = useResponsiveLayout();
   const [heats, setHeats] = useState(initial);
   const [heatNumber, setHeatNumber] = useState(initial[0]?.number ?? 1);
@@ -223,6 +256,21 @@ export function JudgeBoard({
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("idle");
   const [queueCount, setQueueCount] = useState(0);
   const [density, setDensity] = useState<JudgeDensity>("comfortable");
+  const [undo, setUndo] = useState<{
+    heatId: string;
+    entryId: string;
+    bib: number;
+    medal: string | null;
+  } | null>(null);
+  const [moreTarget, setMoreTarget] = useState<{
+    anchor: HTMLElement;
+    heatId: string;
+    entryId: string;
+    name: string;
+    bib: number;
+    notes: string;
+    scratched: boolean;
+  } | null>(null);
   const baselines = useRef<Map<string, string>>(new Map());
   const compact = density === "compact";
 
@@ -317,6 +365,81 @@ export function JudgeBoard({
 
   const dirty = heat ? snapshotHeat(heat) !== (baselines.current.get(heat.id) ?? "") : false;
 
+  useEffect(() => {
+    setUnsaved(dirty);
+    return () => setUnsaved(false);
+  }, [dirty, setUnsaved]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const onLeave = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onLeave);
+    return () => window.removeEventListener("beforeunload", onLeave);
+  }, [dirty]);
+
+  useEffect(() => {
+    let lock: WakeLockSentinel | null = null;
+    let cancelled = false;
+    async function requestLock() {
+      try {
+        if (!("wakeLock" in navigator)) return;
+        const next = await navigator.wakeLock.request("screen");
+        if (cancelled) {
+          await next.release();
+          return;
+        }
+        lock = next;
+      } catch {
+        /* ignore — browsers deny the lock without a gesture or in some iframes */
+      }
+    }
+    void requestLock();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void requestLock();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      void lock?.release();
+    };
+  }, []);
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      const el = event.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
+      if (document.querySelector(".MuiPopover-root, .MuiModal-root")) return;
+      if (event.key === "ArrowLeft" && prevHeat) {
+        event.preventDefault();
+        requestHeatChange(prevHeat.number);
+      }
+      if (event.key === "ArrowRight" && nextHeat) {
+        event.preventDefault();
+        requestHeatChange(nextHeat.number);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [prevHeat, nextHeat, heat, dirty]);
+
+  function chooseMedal(entry: EntryState, value: string | null) {
+    if (!heat || entry.scratched || !value || value === entry.medal) return;
+    setUndo({
+      heatId: heat.id,
+      entryId: entry.heatEntryId,
+      bib: entry.bib,
+      medal: entry.medal,
+    });
+    updateEntry(heat.id, entry.heatEntryId, { medal: value });
+  }
+
   function updateEntry(
     heatId: string,
     entryId: string,
@@ -405,6 +528,7 @@ export function JudgeBoard({
         );
         setConfirmOpen(false);
         setSyncStatus("confirmed");
+        pulseSubmit();
         if (nextHeatAfterConfirm) setHeatNumber(nextHeatAfterConfirm.number);
         router.refresh();
       }
@@ -426,6 +550,7 @@ export function JudgeBoard({
       setConfirmOpen(false);
       setBusy(false);
       setSyncStatus("saved-local");
+      pulseSubmit();
       refreshQueueCount();
       if (nextHeatAfterConfirm) setHeatNumber(nextHeatAfterConfirm.number);
     }
@@ -453,6 +578,11 @@ export function JudgeBoard({
     if (names.length === 2) return ` · ${names.join(" + ")}`;
     return ` · ${names.length} divisions`;
   })();
+
+  const submittedCount = heats.filter((item) => item.submitted).length;
+  const unmarkedAfter = heats.find((item) => item.number > heat.number && !item.submitted);
+  const unmarkedWrap = heats.find((item) => item.number < heat.number && !item.submitted);
+  const nextUnmarked = unmarkedAfter ?? unmarkedWrap ?? null;
 
   function submitHeat() {
     if (heat.submitted) return;
@@ -537,6 +667,20 @@ export function JudgeBoard({
             },
           }}
         />
+        <Button
+          variant="outlined"
+          size={compact || isPhone ? "small" : "medium"}
+          onClick={() => {
+            const root = document.documentElement;
+            if (document.fullscreenElement) {
+              void document.exitFullscreen().catch(() => {});
+              return;
+            }
+            void root.requestFullscreen().catch(() => {});
+          }}
+        >
+          Fill screen
+        </Button>
         <Chip
           label={syncChip.label}
           color={syncChip.color}
@@ -745,17 +889,27 @@ export function JudgeBoard({
               >
                 {heat.groups[0]?.danceName ?? `Heat ${heat.number}`}
               </Typography>
+              <Typography variant="caption" color="text.secondary" display="block">
+                {submittedCount}/{heats.length} submitted
+                {compact ? ` · #${heat.number}${divisionSubtitle}` : null}
+              </Typography>
               {!compact ? (
                 <Typography variant="h6" color="text.secondary">
                   Heat #{heat.number}
                   {divisionSubtitle}
                 </Typography>
-              ) : (
-                <Typography variant="caption" color="text.secondary" noWrap display="block">
-                  #{heat.number}
-                  {divisionSubtitle}
-                </Typography>
-              )}
+              ) : null}
+              <Button
+                size="small"
+                variant="text"
+                disabled={!nextUnmarked}
+                onClick={() => {
+                  if (nextUnmarked) requestHeatChange(nextUnmarked.number);
+                }}
+                sx={{ minHeight: 36, fontWeight: 800 }}
+              >
+                Next unmarked
+              </Button>
             </Box>
             <Button
               variant="contained"
@@ -781,29 +935,6 @@ export function JudgeBoard({
             </Button>
           </Stack>
 
-          {!compact && heat.submitted ? (
-            <Alert severity="success" sx={{ mb: 1 }}>
-              Locked — already submitted
-            </Alert>
-          ) : null}
-          {!compact && !heat.submitted ? (
-            <Alert severity="info" sx={{ mb: 1 }}>
-              Tap a medal for each couple
-              {heat.groups.some((group) => requiresPlacement(group.scale as Scale))
-                ? ", then place if needed"
-                : ""}
-              . Submit at the bottom when done.
-            </Alert>
-          ) : null}
-          {!compact && !heat.submitted && dirty ? (
-            <Alert severity="warning">You have changes that are not submitted yet.</Alert>
-          ) : null}
-          {compact && heat.submitted ? (
-            <Typography variant="caption" color="success.main" fontWeight={700} sx={{ mb: 0.5 }}>
-              Locked — already submitted
-            </Typography>
-          ) : null}
-
           <Box
             sx={
               compact
@@ -813,7 +944,7 @@ export function JudgeBoard({
                     display: "flex",
                     flexDirection: "column",
                     gap: 0.5,
-                    overflow: "hidden",
+                    overflowY: "auto",
                   }
                 : { mt: 2 }
             }
@@ -838,12 +969,10 @@ export function JudgeBoard({
                   sx={
                     compact
                       ? {
-                          flex: group.entries.length,
-                          minHeight: 0,
+                          flex: "0 0 auto",
                           display: "flex",
                           flexDirection: "column",
                           gap: 0.35,
-                          overflow: "hidden",
                         }
                       : undefined
                   }
@@ -863,8 +992,6 @@ export function JudgeBoard({
                     sx={
                       compact
                         ? {
-                            flex: 1,
-                            minHeight: 0,
                             display: "flex",
                             flexDirection: "column",
                             gap: 0.35,
@@ -879,238 +1006,170 @@ export function JudgeBoard({
                         placeTied && band
                           ? band.bandPlaces
                           : Array.from({ length: Math.max(placeMax, 1) }, (_, index) => index + 1);
-                      const medalColor = entry.medal ? MEDAL_COLORS[entry.medal] : null;
+                      const selectedLook = entry.medal ? medalColor(entry.medal) : null;
 
                       if (compact) {
-                        const actionSx = {
-                          flex: "0 0 auto",
-                          width: { xs: 76, sm: 88 },
-                          minHeight: { xs: 32, sm: 34 },
-                          height: { xs: 32, sm: 34 },
-                          px: 0.75,
-                          fontWeight: 800,
-                          fontSize: "0.72rem",
-                          textTransform: "none" as const,
-                        };
+                        const unmarked = !entry.scratched && !entry.medal;
                         return (
                           <Box
                             key={entry.heatEntryId}
                             sx={{
-                              flex: "1 1 0",
-                              minHeight: 0,
+                              flex: "0 0 auto",
                               display: "flex",
-                              alignItems: "stretch",
-                              gap: 0.75,
+                              flexDirection: "column",
+                              gap: 0.5,
                               px: 0.85,
-                              py: 0.55,
-                              overflow: "hidden",
+                              py: 0.6,
                               border: "2px solid",
+                              borderStyle: unmarked ? "dashed" : "solid",
                               borderColor: entry.scratched
                                 ? "error.light"
-                                : medalColor?.bg ?? "divider",
+                                : selectedLook?.bg ?? "divider",
                               borderRadius: 1.5,
                               bgcolor: entry.scratched
                                 ? "#ffebee"
-                                : medalColor
-                                  ? `${medalColor.bg}14`
+                                : selectedLook
+                                  ? `${selectedLook.bg}14`
                                   : "background.paper",
-                              boxShadow: medalColor ? `inset 3px 0 0 ${medalColor.bg}` : "none",
+                              boxShadow: selectedLook ? `inset 3px 0 0 ${selectedLook.bg}` : "none",
                             }}
                           >
-                            <Box
-                              sx={{
-                                width: { xs: 52, sm: 64, md: 72 },
-                                flexShrink: 0,
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                bgcolor: "#0a0a0a",
-                                color: "#fff",
-                                borderRadius: 1.25,
-                                alignSelf: "stretch",
-                              }}
-                            >
-                              <Typography
+                            <Stack direction="row" spacing={0.75} alignItems="center">
+                              <Box
                                 sx={{
-                                  fontWeight: 900,
-                                  fontSize: { xs: "1.35rem", sm: "1.65rem", md: "1.85rem" },
-                                  lineHeight: 1,
-                                  fontVariantNumeric: "tabular-nums",
+                                  width: { xs: 52, sm: 64 },
+                                  height: 44,
+                                  flexShrink: 0,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  bgcolor: "#0a0a0a",
+                                  color: "#fff",
+                                  borderRadius: 1.25,
                                 }}
                               >
-                                {entry.bib}
-                              </Typography>
-                            </Box>
-
-                            <Box
+                                <Typography
+                                  sx={{
+                                    fontWeight: 900,
+                                    fontSize: { xs: "1.35rem", sm: "1.55rem" },
+                                    lineHeight: 1,
+                                    fontVariantNumeric: "tabular-nums",
+                                  }}
+                                >
+                                  {entry.bib}
+                                </Typography>
+                              </Box>
+                              <Box sx={{ flex: 1, minWidth: 0 }}>
+                                <CoupleName name={entry.name} compact />
+                              </Box>
+                              {needsPlace ? (
+                                <Select
+                                  size="small"
+                                  displayEmpty
+                                  value={
+                                    entry.scratched
+                                      ? ""
+                                      : entry.placement ?? (placeMax === 1 ? 1 : "")
+                                  }
+                                  disabled={
+                                    heat.submitted ||
+                                    entry.scratched ||
+                                    placeMax <= 1 ||
+                                    (!placeTied && Boolean(entry.medal))
+                                  }
+                                  onChange={(event) =>
+                                    updateEntry(
+                                      heat.id,
+                                      entry.heatEntryId,
+                                      { placement: Number(event.target.value) },
+                                      { reband: false },
+                                    )
+                                  }
+                                  sx={{
+                                    width: 64,
+                                    flexShrink: 0,
+                                    fontWeight: 800,
+                                    bgcolor: placeTied ? "#fff8e1" : "#fff",
+                                    "& .MuiSelect-select": { py: 1, px: 1, minHeight: 24 },
+                                  }}
+                                >
+                                  <MenuItem value="" disabled>
+                                    #
+                                  </MenuItem>
+                                  {placeOptions.map((place) => (
+                                    <MenuItem key={place} value={place}>
+                                      {place}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              ) : null}
+                              <Button
+                                size="small"
+                                variant={entry.notes.trim() ? "contained" : "outlined"}
+                                disabled={heat.submitted}
+                                onClick={(event) =>
+                                  setMoreTarget({
+                                    anchor: event.currentTarget,
+                                    heatId: heat.id,
+                                    entryId: entry.heatEntryId,
+                                    name: entry.name,
+                                    bib: entry.bib,
+                                    notes: entry.notes,
+                                    scratched: entry.scratched,
+                                  })
+                                }
+                                sx={{ minWidth: 64, minHeight: 44, px: 1, flexShrink: 0 }}
+                              >
+                                More
+                              </Button>
+                            </Stack>
+                            <ToggleButtonGroup
+                              exclusive
+                              size="small"
+                              value={entry.scratched ? null : entry.medal}
+                              onChange={(_, value: string | null) => chooseMedal(entry, value)}
+                              disabled={heat.submitted || entry.scratched}
                               sx={{
-                                flex: 1,
-                                minWidth: 0,
                                 display: "flex",
-                                flexDirection: "column",
-                                justifyContent: "center",
-                                gap: 0.4,
+                                flexWrap: "nowrap",
+                                gap: 0.35,
+                                "& .MuiToggleButtonGroup-grouped": {
+                                  border: "2px solid",
+                                  margin: 0,
+                                  borderRadius: "8px !important",
+                                },
                               }}
                             >
-                              <Stack direction="row" spacing={0.5} alignItems="center">
-                                <ToggleButtonGroup
-                                  exclusive
-                                  size="small"
-                                  value={entry.scratched ? null : entry.medal}
-                                  onChange={(_, value) => {
-                                    if (entry.scratched || !value) return;
-                                    updateEntry(heat.id, entry.heatEntryId, { medal: value });
-                                  }}
-                                  disabled={heat.submitted || entry.scratched}
-                                  sx={{
-                                    flex: 1,
-                                    minWidth: 0,
-                                    display: "flex",
-                                    flexWrap: "nowrap",
-                                    gap: 0.3,
-                                    "& .MuiToggleButtonGroup-grouped": {
-                                      border: "2px solid",
-                                      margin: 0,
-                                      borderRadius: "6px !important",
-                                    },
-                                  }}
-                                >
-                                  {medals.map((medal) => {
-                                    const colors = MEDAL_COLORS[medal] ?? {
-                                      bg: "#212121",
-                                      fg: "#fff",
-                                    };
-                                    const selected = entry.medal === medal && !entry.scratched;
-                                    return (
-                                      <ToggleButton
-                                        key={medal}
-                                        value={medal}
-                                        sx={{
-                                          flex: "1 1 0",
-                                          minWidth: "0 !important",
-                                          minHeight: {
-                                            xs: "30px !important",
-                                            sm: "34px !important",
-                                          },
-                                          height: {
-                                            xs: "30px !important",
-                                            sm: "34px !important",
-                                          },
-                                          p: "2px !important",
-                                          fontSize: {
-                                            xs: "0.7rem !important",
-                                            sm: "0.8rem !important",
-                                          },
-                                          fontWeight: 900,
-                                          lineHeight: 1,
-                                          borderColor: `${colors.bg} !important`,
-                                          color: selected ? colors.fg : colors.bg,
-                                          bgcolor: selected ? colors.bg : "#fff",
-                                          "&.Mui-selected": {
-                                            bgcolor: `${colors.bg} !important`,
-                                            color: `${colors.fg} !important`,
-                                          },
-                                        }}
-                                      >
-                                        {medal}
-                                      </ToggleButton>
-                                    );
-                                  })}
-                                </ToggleButtonGroup>
-                                {needsPlace ? (
-                                  <Select
-                                    size="small"
-                                    displayEmpty
-                                    value={
-                                      entry.scratched
-                                        ? ""
-                                        : entry.placement ?? (placeMax === 1 ? 1 : "")
-                                    }
-                                    disabled={
-                                      heat.submitted ||
-                                      entry.scratched ||
-                                      placeMax <= 1 ||
-                                      (!placeTied && Boolean(entry.medal))
-                                    }
-                                    onChange={(event) =>
-                                      updateEntry(
-                                        heat.id,
-                                        entry.heatEntryId,
-                                        { placement: Number(event.target.value) },
-                                        { reband: false },
-                                      )
-                                    }
+                              {medals.map((medal) => {
+                                const colors = medalColor(medal);
+                                const selected = entry.medal === medal && !entry.scratched;
+                                return (
+                                  <ToggleButton
+                                    key={medal}
+                                    value={medal}
                                     sx={{
-                                      width: 52,
-                                      flexShrink: 0,
-                                      fontWeight: 800,
-                                      bgcolor: placeTied ? "#fff8e1" : "#fff",
-                                      "& .MuiSelect-select": { py: 0.35, px: 0.75 },
+                                      flex: "1 1 0",
+                                      minWidth: "0 !important",
+                                      minHeight: "44px !important",
+                                      height: "44px !important",
+                                      p: "2px !important",
+                                      fontSize: "0.95rem !important",
+                                      fontWeight: 900,
+                                      lineHeight: 1,
+                                      borderColor: `${colors.bg} !important`,
+                                      color: selected ? colors.fg : colors.bg,
+                                      bgcolor: selected ? colors.bg : "#fff",
+                                      "&.Mui-selected": {
+                                        bgcolor: `${colors.bg} !important`,
+                                        color: `${colors.fg} !important`,
+                                      },
                                     }}
                                   >
-                                    <MenuItem value="" disabled>
-                                      #
-                                    </MenuItem>
-                                    {placeOptions.map((place) => (
-                                      <MenuItem key={place} value={place}>
-                                        {place}
-                                      </MenuItem>
-                                    ))}
-                                  </Select>
-                                ) : null}
-                              </Stack>
-
-                              <Stack direction="row" spacing={0.5} alignItems="center">
-                                <Typography
-                                  noWrap
-                                  title={entry.name}
-                                  sx={{
-                                    flex: 1,
-                                    minWidth: 0,
-                                    fontWeight: 800,
-                                    fontSize: { xs: "0.78rem", sm: "0.85rem" },
-                                    lineHeight: 1.2,
-                                    pr: 0.5,
-                                  }}
-                                >
-                                  {entry.name}
-                                </Typography>
-                                <Button
-                                  size="small"
-                                  variant={entry.notes.trim() ? "contained" : "outlined"}
-                                  color={entry.notes.trim() ? "primary" : "inherit"}
-                                  disabled={heat.submitted}
-                                  onClick={() =>
-                                    setNotesTarget({
-                                      heatId: heat.id,
-                                      entryId: entry.heatEntryId,
-                                      name: entry.name,
-                                      bib: entry.bib,
-                                      notes: entry.notes,
-                                    })
-                                  }
-                                  sx={actionSx}
-                                >
-                                  {entry.notes.trim() ? "Notes*" : "Notes"}
-                                </Button>
-                                <Button
-                                  size="small"
-                                  color={entry.scratched ? "success" : "error"}
-                                  variant="outlined"
-                                  disabled={heat.submitted}
-                                  onClick={() =>
-                                    setScratchTarget({
-                                      heatId: heat.id,
-                                      entryId: entry.heatEntryId,
-                                      scratched: entry.scratched,
-                                    })
-                                  }
-                                  sx={actionSx}
-                                >
-                                  {entry.scratched ? "Unscratch" : "Scratch"}
-                                </Button>
-                              </Stack>
-                            </Box>
+                                    {medal}
+                                  </ToggleButton>
+                                );
+                              })}
+                            </ToggleButtonGroup>
                           </Box>
                         );
                       }
@@ -1122,11 +1181,12 @@ export function JudgeBoard({
                           sx={{
                             bgcolor: entry.scratched
                               ? "#ffebee"
-                              : medalColor
-                                ? `${medalColor.bg}14`
+                              : selectedLook
+                                ? `${selectedLook.bg}14`
                                 : "background.paper",
                             borderWidth: 2,
-                            borderColor: medalColor?.bg ?? "divider",
+                            borderStyle: !entry.scratched && !entry.medal ? "dashed" : "solid",
+                            borderColor: selectedLook?.bg ?? "divider",
                           }}
                         >
                           <CardContent>
@@ -1142,15 +1202,13 @@ export function JudgeBoard({
                                 {entry.medal && !entry.scratched ? (
                                   <MedalBadge medal={entry.medal} />
                                 ) : null}
-                                <Typography variant="h6" sx={{ flex: 1, minWidth: 120 }}>
-                                  {entry.name}
-                                </Typography>
+                                <CoupleName name={entry.name} />
                                 {entry.medal && !entry.scratched ? (
                                   <Typography
                                     sx={{
                                       fontSize: "1.5rem",
                                       fontWeight: 900,
-                                      color: medalColor?.bg ?? "text.primary",
+                                      color: selectedLook?.bg ?? "text.primary",
                                     }}
                                   >
                                     {entry.medal}
@@ -1167,10 +1225,7 @@ export function JudgeBoard({
                               <ToggleButtonGroup
                                 exclusive
                                 value={entry.scratched ? null : entry.medal}
-                                onChange={(_, value) => {
-                                  if (entry.scratched || !value) return;
-                                  updateEntry(heat.id, entry.heatEntryId, { medal: value });
-                                }}
+                                onChange={(_, value: string | null) => chooseMedal(entry, value)}
                                 disabled={heat.submitted || entry.scratched}
                                 sx={{
                                   display: "flex",
@@ -1184,7 +1239,7 @@ export function JudgeBoard({
                                 }}
                               >
                                 {medals.map((medal) => {
-                                  const colors = MEDAL_COLORS[medal] ?? { bg: "#212121", fg: "#fff" };
+                                  const colors = medalColor(medal);
                                   const selected = entry.medal === medal && !entry.scratched;
                                   return (
                                     <ToggleButton
@@ -1352,7 +1407,13 @@ export function JudgeBoard({
           sx={{ minHeight: compact ? 48 : 72, fontSize: compact ? "1.1rem" : "1.4rem" }}
           onClick={submitHeat}
         >
-          {heat.submitted ? "Heat locked — already submitted" : "Submit heat"}
+          {heat.submitted
+            ? "Heat locked — already submitted"
+            : `Submit heat · ${heat.groups.reduce(
+                (count, group) =>
+                  count + group.entries.filter((entry) => entry.scratched || Boolean(entry.medal)).length,
+                0,
+              )} of ${heat.groups.reduce((count, group) => count + group.entries.length, 0)} marked`}
         </Button>
       </Box>
 
@@ -1461,7 +1522,8 @@ export function JudgeBoard({
         <DialogTitle>Leave without submitting?</DialogTitle>
         <DialogContent>
           <Typography sx={{ fontSize: "1.2rem", pt: 1 }}>
-            You have unsubmitted changes on heat {heat.number}. Leave anyway?
+            Marks on heat {heat.number} stay on this tablet until you refresh or sign out. Leave this
+            heat?
           </Typography>
         </DialogContent>
         <DialogActions>
@@ -1545,6 +1607,64 @@ export function JudgeBoard({
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Menu
+        anchorEl={moreTarget?.anchor ?? null}
+        open={Boolean(moreTarget)}
+        onClose={() => setMoreTarget(null)}
+      >
+        <MenuItem
+          onClick={() => {
+            if (!moreTarget) return;
+            setNotesTarget({
+              heatId: moreTarget.heatId,
+              entryId: moreTarget.entryId,
+              name: moreTarget.name,
+              bib: moreTarget.bib,
+              notes: moreTarget.notes,
+            });
+            setMoreTarget(null);
+          }}
+        >
+          {moreTarget?.notes.trim() ? "Notes *" : "Notes"}
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (!moreTarget) return;
+            setScratchTarget({
+              heatId: moreTarget.heatId,
+              entryId: moreTarget.entryId,
+              scratched: moreTarget.scratched,
+            });
+            setMoreTarget(null);
+          }}
+        >
+          {moreTarget?.scratched ? "Unscratch" : "Scratch"}
+        </MenuItem>
+      </Menu>
+
+      <Snackbar
+        open={Boolean(undo)}
+        autoHideDuration={4000}
+        onClose={(_, reason) => {
+          if (reason === "clickaway") return;
+          setUndo(null);
+        }}
+        message={undo ? `Undo medal for bib ${undo.bib}` : ""}
+        action={
+          <Button
+            color="inherit"
+            size="small"
+            onClick={() => {
+              if (!undo) return;
+              updateEntry(undo.heatId, undo.entryId, { medal: undo.medal });
+              setUndo(null);
+            }}
+          >
+            Undo
+          </Button>
+        }
+      />
     </Stack>
   );
 }
