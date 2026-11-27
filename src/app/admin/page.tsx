@@ -78,22 +78,23 @@ export default async function AdminPage({ searchParams }: Props) {
         },
       ]}
     >
+      <Stack spacing={2}>
+        {competition ? (
+          <Suspense fallback={null}>
+            <ScopePicker
+              competitions={competitions.map((item) => ({
+                id: item.id,
+                label: `${item.name} · ${item.active ? "Active" : "Inactive"}`,
+              }))}
+              sessions={sessions.map((item) => ({ id: item.id, label: item.name }))}
+              competitionId={competition.id}
+              sessionId={session?.id}
+            />
+          </Suspense>
+        ) : null}
       <AdminConsole
         competition={
           <Stack spacing={3}>
-            {competition ? (
-              <Suspense fallback={null}>
-                <ScopePicker
-                  competitions={competitions.map((item) => ({
-                    id: item.id,
-                    label: `${item.name} · ${item.active ? "Active" : "Inactive"}`,
-                  }))}
-                  sessions={sessions.map((item) => ({ id: item.id, label: item.name }))}
-                  competitionId={competition.id}
-                  sessionId={session?.id}
-                />
-              </Suspense>
-            ) : null}
             <Card>
               <CardContent>
                 <Typography variant="h5" gutterBottom>
@@ -168,7 +169,7 @@ export default async function AdminPage({ searchParams }: Props) {
               </CardContent>
             </Card>
           ) : (
-            <Alert severity="info">Choose a competition and session on the Competition tab.</Alert>
+            <Alert severity="info">Choose a competition and session above.</Alert>
           )
         }
         schedule={
@@ -201,6 +202,7 @@ export default async function AdminPage({ searchParams }: Props) {
           </Card>
         }
       />
+      </Stack>
     </AppShell>
   );
 }
