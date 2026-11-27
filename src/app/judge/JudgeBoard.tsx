@@ -219,28 +219,57 @@ function LockedPlace({
   return (
     <Box
       aria-label={value === "" ? "No place" : `Place ${value}`}
-      sx={{
-        width: tall ? 88 : 64,
-        minHeight: tall ? 64 : 40,
-        px: 1,
-        flexShrink: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontWeight: 900,
-        fontSize: tall ? "1.35rem" : "1.15rem",
-        lineHeight: 1,
-        fontVariantNumeric: "tabular-nums",
-        borderRadius: 1,
-        bgcolor: tied ? "#fff8e1" : "#fff",
-        color: "#1a1a1a",
-        border: "2px solid",
-        borderColor: tied ? "#f9a825" : "#90a4ae",
+      sx={(theme) => {
+        const dark = theme.palette.mode === "dark";
+        return {
+          width: tall ? 88 : 64,
+          minHeight: tall ? 64 : 40,
+          px: 1,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontWeight: 900,
+          fontSize: tall ? "1.35rem" : "1.15rem",
+          lineHeight: 1,
+          fontVariantNumeric: "tabular-nums",
+          borderRadius: 1,
+          bgcolor: tied ? (dark ? "#3e2f14" : "#fff8e1") : dark ? "#242b33" : "#fff",
+          color: tied ? (dark ? "#ffe082" : "#1a1a1a") : dark ? "#f5f7fa" : "#1a1a1a",
+          border: "2px solid",
+          borderColor: tied ? "#f9a825" : dark ? "#5c6b76" : "#90a4ae",
+        };
       }}
     >
       {value === "" ? "—" : value}
     </Box>
   );
+}
+
+/** Unselected medals stay white while marking. A locked Ballroom heat drops them to the dark surface. */
+function medalFace(
+  selected: boolean,
+  colors: { bg: string; fg: string },
+  lockedDark: boolean,
+) {
+  const fill = selected ? colors.bg : lockedDark ? "#242b33" : "#fff";
+  const ink = selected ? colors.fg : colors.bg;
+  return {
+    borderColor: `${colors.bg} !important`,
+    color: ink,
+    bgcolor: fill,
+    "&.Mui-disabled": {
+      opacity: "1 !important",
+      borderColor: `${colors.bg} !important`,
+      color: `${ink} !important`,
+      bgcolor: `${fill} !important`,
+    },
+    "&.Mui-selected, &.Mui-selected.Mui-disabled": {
+      bgcolor: `${colors.bg} !important`,
+      color: `${colors.fg} !important`,
+      opacity: "1 !important",
+    },
+  };
 }
 
 function applyMedalBandsToGroup(group: HeatState["groups"][number]) {
@@ -1243,7 +1272,7 @@ export function JudgeBoard({
                                   <ToggleButton
                                     key={medal}
                                     value={medal}
-                                    sx={{
+                                    sx={(theme) => ({
                                       flex: "1 1 0",
                                       minWidth: "0 !important",
                                       minHeight: "44px !important",
@@ -1252,14 +1281,12 @@ export function JudgeBoard({
                                       fontSize: "0.95rem !important",
                                       fontWeight: 900,
                                       lineHeight: 1,
-                                      borderColor: `${colors.bg} !important`,
-                                      color: selected ? colors.fg : colors.bg,
-                                      bgcolor: selected ? colors.bg : "#fff",
-                                      "&.Mui-selected": {
-                                        bgcolor: `${colors.bg} !important`,
-                                        color: `${colors.fg} !important`,
-                                      },
-                                    }}
+                                      ...medalFace(
+                                        selected,
+                                        colors,
+                                        heat.submitted && theme.palette.mode === "dark",
+                                      ),
+                                    })}
                                   >
                                     {medal}
                                   </ToggleButton>
@@ -1341,7 +1368,7 @@ export function JudgeBoard({
                                     <ToggleButton
                                       key={medal}
                                       value={medal}
-                                      sx={{
+                                      sx={(theme) => ({
                                         flex: {
                                           xs: "1 1 56px",
                                           sm: "1 1 72px",
@@ -1349,19 +1376,17 @@ export function JudgeBoard({
                                         },
                                         maxWidth: { xs: 88, md: 140 },
                                         fontWeight: 900,
-                                        borderColor: `${colors.bg} !important`,
-                                        color: selected ? colors.fg : colors.bg,
-                                        bgcolor: selected ? colors.bg : "#fff",
                                         boxShadow: selected ? `0 0 0 4px ${colors.bg}55` : "none",
                                         transform: selected ? "scale(1.04)" : "none",
-                                        "&.Mui-selected": {
-                                          bgcolor: `${colors.bg} !important`,
-                                          color: `${colors.fg} !important`,
-                                        },
                                         "&.Mui-selected:hover": {
                                           bgcolor: `${colors.bg} !important`,
                                         },
-                                      }}
+                                        ...medalFace(
+                                          selected,
+                                          colors,
+                                          heat.submitted && theme.palette.mode === "dark",
+                                        ),
+                                      })}
                                     >
                                       {medal}
                                     </ToggleButton>

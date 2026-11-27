@@ -1,5 +1,7 @@
 /**
- * Seed helper: ACDA Nationals–style mega competition with scores.
+ * Seed helper: ACDA Nationals–sized competition.
+ * `judged` writes a confirmed sheet for every judge. Otherwise the floor is
+ * the same size and the panel is assigned, with no marks.
  * Used by seed-firestore.ts.
  */
 import { danceName } from "../src/lib/dances";
@@ -41,20 +43,40 @@ async function commitInBatches(ops: Array<(batch: WriteBatch) => void>) {
   }
 }
 
-export async function seedAcdaNationalsCompetition(judgeIds: string[]) {
+export type MegaCompetitionSeed = {
+  name: string;
+  dateLabel: string;
+  location: string;
+  status: string;
+  /** Stored on the competition document. */
+  cddId: string;
+  /** Prefix for division, session, and heat cdd ids. */
+  idPrefix: string;
+  /** Write a confirmed mark for every judge on every heat. */
+  judged: boolean;
+  bibStart?: number;
+  nameSalt?: number;
+};
+
+export async function seedAcdaNationalsCompetition(
+  judgeIds: string[],
+  options: MegaCompetitionSeed,
+) {
+  const bibStart = options.bibStart ?? 100;
+  const nameSalt = options.nameSalt ?? 0;
   const competitionId = adminDb.collection("competitions").doc().id;
   const competition: CompetitionDoc = {
-    name: "ACDA National Championships 2026",
-    dateLabel: "November 19–22, 2026",
-    location: "Dallas, TX",
-    status: "Seeded from Country Scores nationals profile",
+    name: options.name,
+    dateLabel: options.dateLabel,
+    location: options.location,
+    status: options.status,
     active: true,
-    cddId: "countryscores:E4IPWuo9G8JDP5kwmiOk",
+    cddId: options.cddId,
   };
   await adminDb.doc(competitionRef(competitionId)).set(competition);
 
   const divisionByName = new Map<string, { id: string; doc: DivisionDoc }>();
-  let bib = 100;
+  let bib = bibStart;
 
   for (const plan of NATIONALS_DIVISIONS) {
     const divisionId = adminDb.collection("x").doc().id;
@@ -69,7 +91,7 @@ export async function seedAcdaNationalsCompetition(judgeIds: string[]) {
       return {
         id,
         bib: bib++,
-        name: coupleName(plan.ageRank * 1000 + i * 17 + plan.name.length),
+        name: coupleName(plan.ageRank * 1000 + i * 17 + plan.name.length + nameSalt),
       };
     });
     const doc: DivisionDoc = {
@@ -78,7 +100,7 @@ export async function seedAcdaNationalsCompetition(judgeIds: string[]) {
       rule9Count: plan.scale === "COUPLES" ? 5 : 3,
       dances,
       competitors,
-      cddId: `nationals:${plan.name}`,
+      cddId: `${options.idPrefix}:${plan.name}`,
     };
     await adminDb.doc(divisionPath(competitionId, divisionId)).set(doc);
     divisionByName.set(plan.name, { id: divisionId, doc });
@@ -145,14 +167,25 @@ export async function seedAcdaNationalsCompetition(judgeIds: string[]) {
         styleAbbrev: heat.styleAbbrev,
         styleName: danceName(heat.styleAbbrev),
         entries: finalized,
-        confirmedJudgeIds: [...judgeIds],
-        confirmCount: judgeIds.length,
-        cddId: `nationals:${sessionKey}:h${heat.number}`,
+        confirmedJudgeIds: options.judged ? [...judgeIds] : [],
+        confirmCount: options.judged ? judgeIds.length : 0,
+        cddId: `${options.idPrefix}:${sessionKey}:h${heat.number}`,
       };
 
       writeOps.push((batch) => {
         batch.set(adminDb.doc(heatPath(competitionId, sessionId, heatId)), heatDoc);
       });
+
+      if (!options.judged) {
+        heatIndex.push({
+          id: heatId,
+          number: heat.number,
+          styleAbbrev: heat.styleAbbrev,
+          styleName: danceName(heat.styleAbbrev),
+          divisionIds: [...divisionIds],
+        });
+        continue;
+      }
 
       for (const [judgeIndex, judgeId] of judgeIds.entries()) {
         const sheetMarks: JudgeSheetDoc["marks"] = {};
@@ -203,7 +236,7 @@ export async function seedAcdaNationalsCompetition(judgeIds: string[]) {
       sortOrder: meta.sortOrder,
       judgeIds,
       heatIndex,
-      cddId: `nationals:${sessionKey}`,
+      cddId: `${options.idPrefix}:${sessionKey}`,
     };
     await adminDb.doc(sessionPath(competitionId, sessionId)).set(sessionDoc);
     await rebuildSessionLive(competitionId, sessionId);
