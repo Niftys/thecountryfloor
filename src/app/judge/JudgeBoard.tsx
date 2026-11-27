@@ -1121,8 +1121,19 @@ export function JudgeBoard({
                                     width: 64,
                                     flexShrink: 0,
                                     fontWeight: 800,
-                                    bgcolor: placeTied ? "#fff8e1" : "#fff",
-                                    "& .MuiSelect-select": { py: 1, px: 1, minHeight: 24 },
+                                    bgcolor: placeTied ? "#fff8e1" : "background.paper",
+                                    color: placeTied ? "#3e2723" : "text.primary",
+                                    "& .MuiSelect-select": {
+                                      py: 1,
+                                      px: 1,
+                                      minHeight: 24,
+                                      color: "inherit",
+                                    },
+                                    "& .MuiSelect-icon": { color: "inherit" },
+                                    "&.Mui-disabled, & .MuiSelect-select.Mui-disabled": {
+                                      color: "inherit",
+                                      WebkitTextFillColor: "currentColor",
+                                    },
                                   }}
                                 >
                                   <MenuItem value="" disabled>
@@ -1320,11 +1331,17 @@ export function JudgeBoard({
                                         ? {
                                             "& .MuiOutlinedInput-root": {
                                               bgcolor: "#fff8e1",
+                                              color: "#3e2723",
                                               borderRadius: 1,
                                               "& fieldset": {
                                                 borderColor: "#f9a825",
                                                 borderWidth: 2,
                                               },
+                                              "& .MuiSelect-select.Mui-disabled": {
+                                                color: "#3e2723",
+                                                WebkitTextFillColor: "#3e2723",
+                                              },
+                                              "& .MuiSelect-icon": { color: "#3e2723" },
                                             },
                                             "& .MuiInputLabel-root": {
                                               color: "#f57f17",
@@ -1359,7 +1376,14 @@ export function JudgeBoard({
                                           { reband: false },
                                         )
                                       }
-                                      sx={{ minHeight: 64, fontSize: "1.35rem", fontWeight: 700 }}
+                                      sx={{
+                                        minHeight: 64,
+                                        fontSize: "1.35rem",
+                                        fontWeight: 700,
+                                        "& .MuiSelect-select.Mui-disabled": {
+                                          WebkitTextFillColor: "currentColor",
+                                        },
+                                      }}
                                     >
                                       {placeOptions.map((place) => (
                                         <MenuItem
