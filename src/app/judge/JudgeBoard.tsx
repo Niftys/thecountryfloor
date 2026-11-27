@@ -199,6 +199,50 @@ function MedalBadge({ medal }: { medal: string }) {
   );
 }
 
+function placeShown(
+  entry: { scratched: boolean; placement: number | null },
+  placeMax: number,
+) {
+  if (entry.scratched) return "";
+  return entry.placement ?? (placeMax === 1 ? 1 : "");
+}
+
+function LockedPlace({
+  value,
+  tied,
+  tall = false,
+}: {
+  value: number | "";
+  tied: boolean;
+  tall?: boolean;
+}) {
+  return (
+    <Box
+      aria-label={value === "" ? "No place" : `Place ${value}`}
+      sx={{
+        width: tall ? 88 : 64,
+        minHeight: tall ? 64 : 40,
+        px: 1,
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontWeight: 900,
+        fontSize: tall ? "1.35rem" : "1.15rem",
+        lineHeight: 1,
+        fontVariantNumeric: "tabular-nums",
+        borderRadius: 1,
+        bgcolor: tied ? "#fff8e1" : "#fff",
+        color: "#1a1a1a",
+        border: "2px solid",
+        borderColor: tied ? "#f9a825" : "#90a4ae",
+      }}
+    >
+      {value === "" ? "—" : value}
+    </Box>
+  );
+}
+
 function applyMedalBandsToGroup(group: HeatState["groups"][number]) {
   if (!requiresPlacement(group.scale as Scale)) return group;
   const bands = medalBandPlacements(
@@ -1095,56 +1139,63 @@ export function JudgeBoard({
                                 <CoupleName name={entry.name} compact />
                               </Box>
                               {needsPlace ? (
-                                <Select
-                                  size="small"
-                                  displayEmpty
-                                  value={
-                                    entry.scratched
-                                      ? ""
-                                      : entry.placement ?? (placeMax === 1 ? 1 : "")
-                                  }
-                                  disabled={
-                                    heat.submitted ||
-                                    entry.scratched ||
-                                    placeMax <= 1 ||
-                                    (!placeTied && Boolean(entry.medal))
-                                  }
-                                  onChange={(event) =>
-                                    updateEntry(
-                                      heat.id,
-                                      entry.heatEntryId,
-                                      { placement: Number(event.target.value) },
-                                      { reband: false },
-                                    )
-                                  }
-                                  sx={{
-                                    width: 64,
-                                    flexShrink: 0,
-                                    fontWeight: 800,
-                                    bgcolor: placeTied ? "#fff8e1" : "background.paper",
-                                    color: placeTied ? "#3e2723" : "text.primary",
-                                    "& .MuiSelect-select": {
-                                      py: 1,
-                                      px: 1,
-                                      minHeight: 24,
-                                      color: "inherit",
-                                    },
-                                    "& .MuiSelect-icon": { color: "inherit" },
-                                    "&.Mui-disabled, & .MuiSelect-select.Mui-disabled": {
-                                      color: "inherit",
-                                      WebkitTextFillColor: "currentColor",
-                                    },
-                                  }}
-                                >
-                                  <MenuItem value="" disabled>
-                                    #
-                                  </MenuItem>
-                                  {placeOptions.map((place) => (
-                                    <MenuItem key={place} value={place}>
-                                      {place}
+                                heat.submitted ? (
+                                  <LockedPlace
+                                    tied={placeTied}
+                                    value={placeShown(entry, placeMax)}
+                                  />
+                                ) : (
+                                  <Select
+                                    size="small"
+                                    displayEmpty
+                                    value={placeShown(entry, placeMax)}
+                                    disabled={
+                                      entry.scratched ||
+                                      placeMax <= 1 ||
+                                      (!placeTied && Boolean(entry.medal))
+                                    }
+                                    onChange={(event) =>
+                                      updateEntry(
+                                        heat.id,
+                                        entry.heatEntryId,
+                                        { placement: Number(event.target.value) },
+                                        { reband: false },
+                                      )
+                                    }
+                                    sx={(theme) => {
+                                      const ink = placeTied ? "#3e2723" : theme.palette.text.primary;
+                                      return {
+                                        width: 64,
+                                        flexShrink: 0,
+                                        fontWeight: 800,
+                                        bgcolor: placeTied ? "#fff8e1" : "background.paper",
+                                        color: ink,
+                                        "& .MuiSelect-select": {
+                                          py: 1,
+                                          px: 1,
+                                          minHeight: 24,
+                                          color: ink,
+                                        },
+                                        "& .MuiSelect-icon": { color: ink },
+                                        "&.Mui-disabled": { color: ink },
+                                        "& .MuiSelect-select.Mui-disabled": {
+                                          color: ink,
+                                          WebkitTextFillColor: ink,
+                                          opacity: 1,
+                                        },
+                                      };
+                                    }}
+                                  >
+                                    <MenuItem value="" disabled>
+                                      #
                                     </MenuItem>
-                                  ))}
-                                </Select>
+                                    {placeOptions.map((place) => (
+                                      <MenuItem key={place} value={place}>
+                                        {place}
+                                      </MenuItem>
+                                    ))}
+                                  </Select>
+                                )
                               ) : null}
                               <Button
                                 size="small"
@@ -1324,78 +1375,89 @@ export function JudgeBoard({
                                 alignItems={{ md: "center" }}
                               >
                                 {needsPlace ? (
-                                  <FormControl
-                                    sx={{
-                                      minWidth: 180,
-                                      ...(placeTied
-                                        ? {
-                                            "& .MuiOutlinedInput-root": {
-                                              bgcolor: "#fff8e1",
-                                              color: "#3e2723",
-                                              borderRadius: 1,
-                                              "& fieldset": {
-                                                borderColor: "#f9a825",
-                                                borderWidth: 2,
-                                              },
-                                              "& .MuiSelect-select.Mui-disabled": {
-                                                color: "#3e2723",
-                                                WebkitTextFillColor: "#3e2723",
-                                              },
-                                              "& .MuiSelect-icon": { color: "#3e2723" },
-                                            },
-                                            "& .MuiInputLabel-root": {
-                                              color: "#f57f17",
-                                              fontWeight: 700,
-                                            },
-                                          }
-                                        : {}),
-                                    }}
-                                    disabled={
-                                      heat.submitted ||
-                                      entry.scratched ||
-                                      placeMax <= 1 ||
-                                      (!placeTied && Boolean(entry.medal))
-                                    }
-                                  >
-                                    <InputLabel id={`place-${entry.heatEntryId}`}>
-                                      {placeTied ? "Place (tie — pick)" : "Place"}
-                                    </InputLabel>
-                                    <Select
-                                      labelId={`place-${entry.heatEntryId}`}
-                                      label={placeTied ? "Place (tie — pick)" : "Place"}
-                                      value={
-                                        entry.scratched
-                                          ? ""
-                                          : entry.placement ?? (placeMax === 1 ? 1 : "")
-                                      }
-                                      onChange={(event) =>
-                                        updateEntry(
-                                          heat.id,
-                                          entry.heatEntryId,
-                                          { placement: Number(event.target.value) },
-                                          { reband: false },
-                                        )
-                                      }
+                                  heat.submitted ? (
+                                    <LockedPlace
+                                      tall
+                                      tied={placeTied}
+                                      value={placeShown(entry, placeMax)}
+                                    />
+                                  ) : (
+                                    <FormControl
                                       sx={{
-                                        minHeight: 64,
-                                        fontSize: "1.35rem",
-                                        fontWeight: 700,
-                                        "& .MuiSelect-select.Mui-disabled": {
-                                          WebkitTextFillColor: "currentColor",
-                                        },
+                                        minWidth: 180,
+                                        ...(placeTied
+                                          ? {
+                                              "& .MuiOutlinedInput-root": {
+                                                bgcolor: "#fff8e1",
+                                                color: "#3e2723",
+                                                borderRadius: 1,
+                                                "& fieldset": {
+                                                  borderColor: "#f9a825",
+                                                  borderWidth: 2,
+                                                },
+                                                "& .MuiSelect-select.Mui-disabled": {
+                                                  color: "#3e2723",
+                                                  WebkitTextFillColor: "#3e2723",
+                                                },
+                                                "& .MuiSelect-icon": { color: "#3e2723" },
+                                              },
+                                              "& .MuiInputLabel-root": {
+                                                color: "#f57f17",
+                                                fontWeight: 700,
+                                              },
+                                            }
+                                          : {}),
                                       }}
+                                      disabled={
+                                        entry.scratched ||
+                                        placeMax <= 1 ||
+                                        (!placeTied && Boolean(entry.medal))
+                                      }
                                     >
-                                      {placeOptions.map((place) => (
-                                        <MenuItem
-                                          key={place}
-                                          value={place}
-                                          sx={{ fontSize: "1.25rem", minHeight: 48 }}
-                                        >
-                                          {place}
-                                        </MenuItem>
-                                      ))}
-                                    </Select>
-                                  </FormControl>
+                                      <InputLabel id={`place-${entry.heatEntryId}`}>
+                                        {placeTied ? "Place (tie — pick)" : "Place"}
+                                      </InputLabel>
+                                      <Select
+                                        labelId={`place-${entry.heatEntryId}`}
+                                        label={placeTied ? "Place (tie — pick)" : "Place"}
+                                        value={placeShown(entry, placeMax)}
+                                        onChange={(event) =>
+                                          updateEntry(
+                                            heat.id,
+                                            entry.heatEntryId,
+                                            { placement: Number(event.target.value) },
+                                            { reband: false },
+                                          )
+                                        }
+                                        sx={(theme) => {
+                                          const ink = placeTied
+                                            ? "#3e2723"
+                                            : theme.palette.text.primary;
+                                          return {
+                                            minHeight: 64,
+                                            fontSize: "1.35rem",
+                                            fontWeight: 700,
+                                            color: ink,
+                                            "& .MuiSelect-select.Mui-disabled": {
+                                              color: ink,
+                                              WebkitTextFillColor: ink,
+                                              opacity: 1,
+                                            },
+                                          };
+                                        }}
+                                      >
+                                        {placeOptions.map((place) => (
+                                          <MenuItem
+                                            key={place}
+                                            value={place}
+                                            sx={{ fontSize: "1.25rem", minHeight: 48 }}
+                                          >
+                                            {place}
+                                          </MenuItem>
+                                        ))}
+                                      </Select>
+                                    </FormControl>
+                                  )
                                 ) : null}
 
                                 <TextField
